@@ -220,8 +220,9 @@ if btn_run_audit:
                 drive_engine = DriveDataEngine(DRIVE_KEY_PATH, DRIVE_FOLDER_ID)
                 master_list = drive_engine.build_master_dataframe()
 
-                if master_list.empty:
-                    st.error("❌ 無法從 Google Drive 取得成分股清單，請檢查 Folder ID 或檔案名稱。")
+                # [新增檢查點] 避免空清單導致後續無結果
+                if master_list is None or master_list.empty:
+                    st.error("❌ 無法從 Google Drive 取得『DNA成分股_總表.xlsx』，請檢查 Folder ID 是否正確。")
                     st.stop()
                     
                 # 3. 掃描所有個股
