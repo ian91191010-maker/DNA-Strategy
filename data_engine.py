@@ -137,12 +137,19 @@ def process_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df_m['RSI_M_4'] = ta.rsi(df_m['close'], length=4)
     df_m['WILLR_M_3'] = ta.willr(df_m['high'], df_m['low'], df_m['close'], length=3)
 
-    # 月線 +DI (使用 14 期趨勢作為基準替代)
-    adx_m = ta.adx(df_m['high'], df_m['low'], df_m['close'], length=14)
-    if adx_m is not None and not adx_m.empty:
-        dmp_col = [c for c in adx_m.columns if 'DMP' in c] # 尋找 +DI 欄位
-        if dmp_col:
-            df_m['PLUS_DI_M_1'] = adx_m[dmp_col[0]]
+    # 嚴格還原原版：手動計算 1 期 +DI
+    up_move = df_m['high'].diff()
+    down_move = df_m['low'].shift(1) - df_m['low']
+    
+    tr1 = df_m['high'] - df_m['low']
+    tr2 = (df_m['high'] - df_m['close'].shift(1)).abs()
+    tr3 = (df_m['low'] - df_m['close'].shift(1)).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    
+    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+    
+    # 避免除以 0，產生 PLUS_DI_M_1
+    df_m['PLUS_DI_M_1'] = np.where(tr > 0, (plus_dm / tr) * 100, 0.0)
 
     # ----------------------------------
     # [4] 跨週期訊號對齊 (Align to Daily)
