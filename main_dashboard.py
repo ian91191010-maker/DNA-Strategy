@@ -18,7 +18,7 @@ st.set_page_config(page_title="大飆股 DNA 戰情室", layout="wide")
 
 # 初始化 Session State，確保點擊表格時資料不會消失
 if 'selected_ticker' not in st.session_state:
-    st.session_state['selected_ticker'] = ""
+    st.session_state['selected_ticker'] = "TAIEX"
 if 'audit_results' not in st.session_state:
     st.session_state['audit_results'] = pd.DataFrame()
 if 'market_env' not in st.session_state:
