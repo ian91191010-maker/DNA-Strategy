@@ -219,7 +219,11 @@ if btn_run_audit:
                 # 2. 啟動 Google Drive 引擎
                 drive_engine = DriveDataEngine(DRIVE_KEY_PATH, DRIVE_FOLDER_ID)
                 master_list = drive_engine.build_master_dataframe()
-                
+
+                if master_list.empty:
+                    st.error("❌ 無法從 Google Drive 取得成分股清單，請檢查 Folder ID 或檔案名稱。")
+                    st.stop()
+                    
                 # 3. 掃描所有個股
                 results = []
                 progress_bar = st.progress(0)
