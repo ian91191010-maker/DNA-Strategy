@@ -33,7 +33,7 @@ audit_engine = BigBullAuditEngine()
 
 # 設定你的 Google Drive 參數 (請修改為你的真實 ID)
 DRIVE_KEY_PATH = 'credentials.json'
-DRIVE_FOLDER_ID = '請替換為你的Google_Drive資料夾ID'
+DRIVE_FOLDER_ID = '1SQze_GC0pDWf07fHCHOQJoATbPnyg7yX'
 
 # ==========================================
 # 1. 圖表渲染函式 (封裝 DNAstock.py 的邏輯)
