@@ -14,7 +14,7 @@ from audit_engine import BigBullAuditEngine
 # ==========================================
 # 0. 網頁全域與暫存狀態設定 (Session State)
 # ==========================================
-st.set_page_config(page_title="大飆股 DNA 戰情室", layout="wide")
+st.set_page_config(page_title="飆股篩選", layout="wide")
 
 # 初始化 Session State，確保點擊表格時資料不會消失
 if 'selected_ticker' not in st.session_state:
@@ -168,13 +168,13 @@ def render_interactive_chart(stock_id, years_to_show):
 # 2. 側邊欄 (Sidebar)
 # ==========================================
 with st.sidebar:
-    st.markdown("<h2 style='text-align: center;'>大飆股戰情控制台</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>飆股篩選系統</h2>", unsafe_allow_html=True)
     st.markdown("---")
     
-    st.header("🔍 區塊一：單檔探索")
-    input_stock_id = st.text_input("輸入股票代碼 (例: 2330)", value="")
+    st.header("單檔探索")
+    input_stock_id = st.text_input("輸入股票代碼", value="")
     years_to_show = st.slider("顯示資料區間 (年)", min_value=1.0, max_value=5.0, value=4.0, step=0.5)
-    btn_single_search = st.button("📊 顯示單檔圖表")
+    btn_single_search = st.button("顯示單檔圖表")
     
     # 邏輯：按下按鈕時，更新 Session State
     if btn_single_search and input_stock_id:
@@ -182,9 +182,9 @@ with st.sidebar:
     
     st.markdown("---")
     
-    st.header("⚙️ 區塊二：系統審計")
+    st.header("系統審計")
     finance_index_input = st.number_input("今日金融保險類指數 (Y)", min_value=0.0, value=0.0, step=0.1)
-    btn_run_audit = st.button("🚀 啟動 / 更新雲端資料", type="primary", use_container_width=True)
+    btn_run_audit = st.button("啟動 / 更新雲端資料", type="primary", use_container_width=True)
 
 # ==========================================
 # 3. 主畫面 (Main Content)
@@ -194,7 +194,7 @@ st.markdown("<h3 style='text-align: center;'>大飆股 DNA 系統審計看板</h
 # --- 圖表區塊 ---
 chart_container = st.container(border=True)
 with chart_container:
-    st.subheader("📈 互動式 K 線與指標圖表")
+    st.subheader("K 線與指標")
     if st.session_state['selected_ticker']:
         with st.spinner(f"正在繪製 {st.session_state['selected_ticker']} 圖表..."):
             render_interactive_chart(st.session_state['selected_ticker'], years_to_show)
@@ -241,31 +241,59 @@ col1, col2 = st.columns([1, 2])
 
 # 左欄：大盤環境
 with col1:
-    st.subheader("🌍 大盤環境與風險")
+    st.subheader("大盤環境與風險")
     with st.container(border=True):
-        m_env = st.session_state['market_env']
-        p_env = st.session_state['pendulum']
+        m_env = st.session_state.get('market_env', {})
+        p_env = st.session_state.get('pendulum', {})
         
-        st.markdown("#### 🚦 環境燈號")
-        st.write(m_env.get('Env_Light', '⚪ 尚未運算'))
+        # --- 1. 數值預處理 ---
+        import re
+        # 利用正則表達式，攔截字串中的浮點數並轉為整數 (例如 9.0 -> 9, 5.5 -> 5)
+        raw_streak = m_env.get('Streak_Msg', '-')
+        streak_msg = re.sub(r'\d+\.\d+', lambda x: str(int(float(x.group()))), raw_streak)
         
-        st.markdown("#### 📊 轉折與趨勢 (6K)")
-        st.write(f"- {m_env.get('Streak_Msg', '-')}")
-        st.write(f"- 系統風險: {m_env.get('Mod_G', '-')}")
+        # 處理五大主流類股的列表格式
+        sectors = st.session_state.get('sectors', [])
+        sectors_html = "".join([f"<li>{s}</li>" for s in sectors]) if sectors else "<li>尚未運算</li>"
         
-        st.markdown("#### ⚖️ 末日鐘擺 (X-Y*10)")
-        st.write(f"- 狀態: {p_env.get('Doomsday_Status', '-')}")
-        st.write(f"- 差值: {p_env.get('Doomsday_Val', '-')}")
+        # --- 2. 渲染自訂顏色的 UI 區塊 (50% 透明度) ---
+        # 使用 rgba(R, G, B, 0.5) 設定四種不同顏色的背景，0.5 代表 50% 透明度
+        html_layout = f"""
+        <div style="background-color: rgba(38, 166, 154, 0.5); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 10px 0; color: white;">環境燈號</h4>
+            <span style="font-size: 16px; color: white;">{m_env.get('Env_Light', '尚未運算')}</span>
+        </div>
         
-        st.markdown("#### 🏆 五大主流類股")
-        if st.session_state['sectors']:
-            for s in st.session_state['sectors']: st.write(s)
-        else:
-            st.write("尚未運算")
+        <div style="background-color: rgba(239, 83, 80, 0.5); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 10px 0; color: white;">轉折與趨勢</h4>
+            <ul style="margin: 0; padding-left: 20px; color: white;">
+                <li>{streak_msg}</li>
+                <li>系統風險: {m_env.get('Mod_G', '-')}</li>
+            </ul>
+        </div>
+        
+        <div style="background-color: rgba(255, 152, 0, 0.5); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 10px 0; color: white;">末日鐘擺 (X-Y*10)</h4>
+            <ul style="margin: 0; padding-left: 20px; color: white;">
+                <li>狀態: {p_env.get('Doomsday_Status', '-')}</li>
+                <li>差值: {p_env.get('Doomsday_Val', '-')}</li>
+            </ul>
+        </div>
+        
+        <div style="background-color: rgba(41, 98, 255, 0.5); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 10px 0; color: white;">五大主流類股</h4>
+            <ul style="margin: 0; padding-left: 20px; color: white;">
+                {sectors_html}
+            </ul>
+        </div>
+        """
+        
+        # 透過 st.markdown 輸出 HTML
+        st.markdown(html_layout, unsafe_allow_html=True)
 
 # 右欄：Pass/Fail 名單
 with col2:
-    st.subheader("📋 嚴選強勢股名單") # 標題可以隨你喜好修改
+    st.subheader("強勢股名單")
     with st.container(border=True):
         df_res = st.session_state['audit_results']
         if not df_res.empty:
@@ -274,7 +302,7 @@ with col2:
             df_res = df_res.sort_values(by='漲跌幅 (%)', ascending=False).reset_index(drop=True)
             
             # 2. 刪除多餘欄位，只萃取你要求的四個欄位顯示在畫面上
-            display_df = df_res[['股號', '股名', '收盤價(最新日期)', '漲跌幅 (%)']]
+            display_df = df_res[['股號', '股名', '收盤價', '漲跌幅 (%)']]
             
             # 3. 顯示乾淨的表格並開啟點選功能
             event = st.dataframe(
