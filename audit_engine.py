@@ -139,7 +139,6 @@ class BigBullAuditEngine:
                         sector_scores[name] = abs(wr3.iloc[-1]) # 取絕對值方便比較
         
         if sector_scores:
-            # 找出數值最小的 (因為原版 WR 是負數，越接近0代表越強，取絕對值後找最小)
             winner_name = min(sector_scores, key=sector_scores.get)
 
         # 2. 小鐘擺 Z 值 (大盤 - 台積電*30)
@@ -346,9 +345,9 @@ class BigBullAuditEngine:
 
             return {
                 "股號": stock_id,
-                "名稱": drive_data.get('證券名稱', '未知'),
-                "當日收盤價": round(row['close'], 2),
-                "總漲幅 (%)": drive_data.get('總漲幅 (%)', 0),
+                "股名": drive_data.get('股名', '未知'), # 修正對應 Drive 的欄位名稱
+                "收盤價(最新日期)": drive_data.get('收盤價(最新日期)', round(row['close'], 2)),
+                "漲跌幅 (%)": drive_data.get('漲跌幅 (%)', 0.0), # 修正對應 Drive 的欄位名稱
                 "判定狀態": "🟢 Pass" if is_dna_pass else "⚪ Fail",
                 "跡象評分": total_score,
                 "切入訊號": ", ".join(d_signals) if d_signals else "-",
@@ -363,9 +362,9 @@ class BigBullAuditEngine:
         """輔助函式：回傳空值結構"""
         return {
             "股號": stock_id,
-            "名稱": drive_data.get('證券名稱', '未知'),
-            "當日收盤價": 0,
-            "總漲幅 (%)": drive_data.get('總漲幅 (%)', 0),
+            "股名": drive_data.get('股名', '未知'),
+            "收盤價(最新日期)": drive_data.get('收盤價(最新日期)', 0.0),
+            "漲跌幅 (%)": drive_data.get('漲跌幅 (%)', 0.0),
             "判定狀態": "🔴 Error",
             "跡象評分": 0,
             "切入訊號": "-",
