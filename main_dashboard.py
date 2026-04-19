@@ -218,13 +218,8 @@ if btn_run_audit:
                 
                 # 2. 啟動 Google Drive 引擎
                 drive_engine = DriveDataEngine(DRIVE_KEY_PATH, DRIVE_FOLDER_ID)
-                master_list = drive_engine.build_master_dataframe()
-
-                # [新增檢查點] 避免空清單導致後續無結果
-                if master_list is None or master_list.empty:
-                    st.error("❌ 無法從 Google Drive 取得『DNA成分股_總表.xlsx』，請檢查 Folder ID 是否正確。")
-                    st.stop()
-                    
+                master_list = drive_engine.get_eligible_dna_stocks()
+                
                 # 3. 掃描所有個股
                 results = []
                 progress_bar = st.progress(0)
@@ -273,24 +268,28 @@ with col2:
     st.subheader("📋 Mod E (DNA) 審計名單")
     with st.container(border=True):
         df_res = st.session_state['audit_results']
+        
         if not df_res.empty:
-            # 顯示表格並開啟點選功能
+            # 1. 顯示表格並開啟點選功能 (on_select="rerun" 是關鍵)
             event = st.dataframe(
                 df_res,
                 use_container_width=True,
                 hide_index=True,
                 selection_mode="single-row",
-                on_select="rerun"
+                on_select="rerun" 
             )
             
-            # 捕捉點擊事件，更新上方圖表
+            # 2. 捕捉點擊事件，更新上方圖表
             if len(event.selection.rows) > 0:
-                selected_idx = event.selection.rows[0]
-                clicked_ticker = df_res.iloc[selected_idx]["股號"]
-                # 只有當點擊了與目前不同檔股票時，才更新 State 並觸發重繪
-                if clicked_ticker != st.session_state['selected_ticker']:
+                selected_idx = event.selection.rows[0] # 取得被點選的 Row Index
+                
+                # 3. 從 DataFrame 提取該列的「股號」 (加上 str() 確保型態正確)
+                clicked_ticker = str(df_res.iloc[selected_idx]["股號"]) 
+                
+                # 4. 只有當點擊了與目前不同的股票時，才更新 State 並觸發重繪
+                if clicked_ticker != st.session_state.get('selected_ticker', ''):
                     st.session_state['selected_ticker'] = clicked_ticker
-                    st.rerun() # 強制重整畫面以渲染新圖表
+                    st.rerun() # 強制重整畫面，讓上方的 render_interactive_chart 抓取新股號繪圖
                     
         else:
             st.info("請點擊左側「啟動 / 更新雲端資料」載入本日名單。")
