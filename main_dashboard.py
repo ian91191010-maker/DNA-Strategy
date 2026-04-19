@@ -265,31 +265,34 @@ with col1:
 
 # 右欄：Pass/Fail 名單
 with col2:
-    st.subheader("📋 Mod E (DNA) 審計名單")
+    st.subheader("📋 嚴選強勢股名單") # 標題可以隨你喜好修改
     with st.container(border=True):
         df_res = st.session_state['audit_results']
-        
         if not df_res.empty:
-            # 1. 顯示表格並開啟點選功能 (on_select="rerun" 是關鍵)
+            
+            # 1. 確保以「漲跌幅 (%)」由高到低排序
+            df_res = df_res.sort_values(by='漲跌幅 (%)', ascending=False).reset_index(drop=True)
+            
+            # 2. 刪除多餘欄位，只萃取你要求的四個欄位顯示在畫面上
+            display_df = df_res[['股號', '股名', '收盤價(最新日期)', '漲跌幅 (%)']]
+            
+            # 3. 顯示乾淨的表格並開啟點選功能
             event = st.dataframe(
-                df_res,
+                display_df,
                 use_container_width=True,
                 hide_index=True,
                 selection_mode="single-row",
-                on_select="rerun" 
+                on_select="rerun"
             )
             
-            # 2. 捕捉點擊事件，更新上方圖表
+            # 捕捉點擊事件，更新上方圖表 (邏輯需對應 display_df)
             if len(event.selection.rows) > 0:
-                selected_idx = event.selection.rows[0] # 取得被點選的 Row Index
+                selected_idx = event.selection.rows[0]
+                clicked_ticker = str(display_df.iloc[selected_idx]["股號"]) 
                 
-                # 3. 從 DataFrame 提取該列的「股號」 (加上 str() 確保型態正確)
-                clicked_ticker = str(df_res.iloc[selected_idx]["股號"]) 
-                
-                # 4. 只有當點擊了與目前不同的股票時，才更新 State 並觸發重繪
                 if clicked_ticker != st.session_state.get('selected_ticker', ''):
                     st.session_state['selected_ticker'] = clicked_ticker
-                    st.rerun() # 強制重整畫面，讓上方的 render_interactive_chart 抓取新股號繪圖
+                    st.rerun() 
                     
         else:
             st.info("請點擊左側「啟動 / 更新雲端資料」載入本日名單。")
