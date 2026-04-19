@@ -102,23 +102,45 @@ def render_interactive_chart(stock_id, years_to_show):
         score_json = json.dumps(score_data)
         volume_json = json.dumps(volume_dict)
 
-        # 組合 HTML
+        # 組合 HTML (新增懸浮工具列與縮放功能)
         html_code = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
             <style>
-                body {{ margin: 0; padding: 0; background-color: #131722; color: white; font-family: sans-serif; }}
-                #tvchart-container {{ position: relative; width: 100%; height: 750px; }}
+                body {{ margin: 0; padding: 0; background-color: #131722; color: white; font-family: sans-serif; overflow: hidden; }}
+                #tvchart-container {{ position: relative; width: 100vw; height: 100vh; }}
                 #tvchart {{ width: 100%; height: 100% }} 
                 #tooltip {{ position: absolute; z-index: 1000; background: rgba(19, 23, 34, 0.8); padding: 8px; border-radius: 4px; display: none; pointer-events: none; }}
                 #chart-title {{ position: absolute; top: 15px; left: 15px; z-index: 10; color: #E0E3EB; font-size: 20px; font-weight: bold; pointer-events: none; }}
+                
+                /* 工具列 CSS 設定 */
+                #toolbar {{ position: absolute; top: 15px; right: 60px; z-index: 10; display: flex; gap: 8px; }}
+                .tool-btn {{
+                    background: rgba(43, 43, 67, 0.8); 
+                    border: 1px solid #454559; 
+                    color: #E0E3EB; 
+                    cursor: pointer; 
+                    padding: 6px 12px; 
+                    border-radius: 4px; 
+                    font-size: 16px; 
+                    transition: background 0.2s;
+                }}
+                .tool-btn:hover {{ background: rgba(70, 70, 100, 1); }}
             </style>
         </head>
         <body>
             <div id="tvchart-container">
                 <div id="chart-title">{display_title}</div>
+                
+                <div id="toolbar">
+                    <button class="tool-btn" id="btn-zoom-in" title="放大">➕</button>
+                    <button class="tool-btn" id="btn-zoom-out" title="縮小">➖</button>
+                    <button class="tool-btn" id="btn-reset" title="重設視角">🏠</button>
+                    <button class="tool-btn" id="btn-fullscreen" title="全螢幕切換">⛶</button>
+                </div>
+
                 <div id="tooltip"></div>
                 <div id="tvchart"></div>
             </div>
@@ -156,11 +178,55 @@ def render_interactive_chart(stock_id, years_to_show):
                 scoreSeries.createPriceLine({{ price: 3, color: '#FFEB3B', lineStyle: 0 }});
 
                 chart.timeScale().fitContent();
+
+                // === 新增：工具列功能實作 ===
+                
+                // 1. 放大 (Zoom In)
+                document.getElementById('btn-zoom-in').addEventListener('click', () => {{
+                    const range = chart.timeScale().getVisibleLogicalRange();
+                    if (range) {{
+                        const diff = range.to - range.from;
+                        chart.timeScale().setVisibleLogicalRange({{ from: range.from + diff * 0.15, to: range.to - diff * 0.15 }});
+                    }}
+                }});
+
+                // 2. 縮小 (Zoom Out)
+                document.getElementById('btn-zoom-out').addEventListener('click', () => {{
+                    const range = chart.timeScale().getVisibleLogicalRange();
+                    if (range) {{
+                        const diff = range.to - range.from;
+                        chart.timeScale().setVisibleLogicalRange({{ from: range.from - diff * 0.15, to: range.to + diff * 0.15 }});
+                    }}
+                }});
+
+                // 3. 重設視角 (Fit Content)
+                document.getElementById('btn-reset').addEventListener('click', () => {{
+                    chart.timeScale().fitContent();
+                }});
+
+                // 4. 全螢幕切換 (Fullscreen)
+                document.getElementById('btn-fullscreen').addEventListener('click', () => {{
+                    const container = document.getElementById('tvchart-container');
+                    if (!document.fullscreenElement) {{
+                        container.requestFullscreen().catch(err => console.error(err));
+                    }} else {{
+                        document.exitFullscreen();
+                    }}
+                }});
+
+                // 確保調整視窗大小或進入全螢幕時，圖表尺寸能自動貼合
+                new ResizeObserver(entries => {{
+                    if (entries.length === 0 || entries[0].target !== document.getElementById('tvchart-container')) return;
+                    const newRect = entries[0].contentRect;
+                    chart.applyOptions({{ width: newRect.width, height: newRect.height }});
+                }}).observe(document.getElementById('tvchart-container'));
+
             </script>
         </body>
         </html>
         """
-        components.html(html_code, height=770, scrolling=False)
+        components.html(html_code, height=750, scrolling=False)
+
     except Exception as e:
         st.error(f"圖表繪製發生錯誤：{e}")
 
@@ -302,7 +368,7 @@ with col2:
             df_res = df_res.sort_values(by='漲跌幅 (%)', ascending=False).reset_index(drop=True)
             
             # 2. 刪除多餘欄位，只萃取你要求的四個欄位顯示在畫面上
-            display_df = df_res[['股號', '股名', '收盤價', '漲跌幅 (%)']]
+            display_df = df_res[['股號', '股名', '收盤價(最新日期)', '漲跌幅 (%)']]
             
             # 3. 顯示乾淨的表格並開啟點選功能
             event = st.dataframe(
