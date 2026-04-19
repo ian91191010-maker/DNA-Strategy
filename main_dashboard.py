@@ -135,9 +135,9 @@ def render_interactive_chart(stock_id, years_to_show):
                 <div id="chart-title">{display_title}</div>
                 
                 <div id="toolbar">
-                    <button class="tool-btn" id="btn-zoom-in" title="放大">➕</button>
-                    <button class="tool-btn" id="btn-zoom-out" title="縮小">➖</button>
-                    <button class="tool-btn" id="btn-reset" title="重設視角">🏠</button>
+                    <button class="tool-btn" id="btn-zoom-in" title="放大">＋</button>
+                    <button class="tool-btn" id="btn-zoom-out" title="縮小">－</button>
+                    <button class="tool-btn" id="btn-reset" title="重設視角">↺</button>
                     <button class="tool-btn" id="btn-fullscreen" title="全螢幕切換">⛶</button>
                 </div>
 
