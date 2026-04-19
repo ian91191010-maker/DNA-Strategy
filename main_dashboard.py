@@ -51,13 +51,12 @@ def render_interactive_chart(stock_id, years_to_show):
             st.error("該區間內沒有產生有效的數據！")
             return
 
-        # 補算客製化 ADX_300
+        # 補算客製化 ADX_300 (維持你原本的邏輯)
         high, low, close = df_final['high'], df_final['low'], df_final['close']
         tr = pd.concat([high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()], axis=1).max(axis=1)
         up, down = high - high.shift(1), low.shift(1) - low
         plus_dm = np.where((up > down) & (up > 0), up, 0.0)
         minus_dm = np.where((down > up) & (down > 0), down, 0.0)
-        
         alpha = 1 / 300
         atr = tr.ewm(alpha=alpha, adjust=False).mean()
         plus_di = 100 * pd.Series(plus_dm, index=df_final.index).ewm(alpha=alpha, adjust=False).mean() / atr
@@ -65,6 +64,7 @@ def render_interactive_chart(stock_id, years_to_show):
         dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
         df_final['ADX_300'] = dx.ewm(alpha=alpha, adjust=False).mean()
 
+        # 資料清洗與時間裁切
         df_final = df_final[~df_final.index.duplicated(keep='last')].sort_index()
         cutoff_date = pd.to_datetime(datetime.date.today() - relativedelta(years=int(years_to_show), months=int((years_to_show % 1) * 12)))
         df_final = df_final[df_final.index >= cutoff_date].dropna(subset=['WILLR_50', 'PLUS_DI_M_1'])
@@ -75,7 +75,7 @@ def render_interactive_chart(stock_id, years_to_show):
             
         df_final['time'] = df_final.index.strftime('%Y-%m-%d')
         
-        # 準備 JSON 繪圖資料
+        # 準備 JSON 資料
         wr_data, score_data, volume_dict = [], [], {}
         for _, row in df_final.iterrows():
             date_str = row['time']
@@ -102,7 +102,7 @@ def render_interactive_chart(stock_id, years_to_show):
         score_json = json.dumps(score_data)
         volume_json = json.dumps(volume_dict)
 
-        # 組合 HTML
+        # 組合 HTML 程式碼
         html_code = f"""
         <!DOCTYPE html>
         <html>
@@ -113,27 +113,23 @@ def render_interactive_chart(stock_id, years_to_show):
                 #tvchart-container {{ position: relative; width: 100vw; height: 100vh; }}
                 #tvchart {{ width: 100%; height: 100% }} 
                 
-                /* 透明灰色提示框樣式 */
+                /* 透明灰色提示框 */
                 #tooltip {{ 
-                    position: absolute; 
-                    z-index: 1000; 
-                    background: rgba(50, 50, 50, 0.7); 
-                    color: #E0E3EB;
-                    padding: 10px; 
-                    border-radius: 6px; 
-                    display: none; 
-                    pointer-events: none;
-                    font-size: 13px;
-                    line-height: 1.5;
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+                    position: absolute; z-index: 1000; background: rgba(50, 50, 50, 0.7); 
+                    color: #E0E3EB; padding: 10px; border-radius: 6px; display: none; 
+                    pointer-events: none; font-size: 13px; line-height: 1.5;
+                    border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 6px rgba(0,0,0,0.3);
                 }}
                 
                 #chart-title {{ position: absolute; top: 15px; left: 15px; z-index: 10; color: #E0E3EB; font-size: 20px; font-weight: bold; pointer-events: none; }}
+                
+                /* 工具列按鈕 */
                 #toolbar {{ position: absolute; top: 15px; right: 60px; z-index: 10; display: flex; gap: 8px; }}
                 .tool-btn {{
-                    background: rgba(43, 43, 67, 0.8); border: 1px solid #454559; color: #E0E3EB; cursor: pointer; padding: 6px 12px; border-radius: 4px; font-size: 16px;
+                    background: rgba(43, 43, 67, 0.8); border: 1px solid #454559; color: #E0E3EB; 
+                    cursor: pointer; padding: 6px 12px; border-radius: 4px; font-size: 16px; transition: background 0.2s;
                 }}
+                .tool-btn:hover {{ background: rgba(70, 70, 100, 1); }}
             </style>
         </head>
         <body>
@@ -143,6 +139,7 @@ def render_interactive_chart(stock_id, years_to_show):
                     <button class="tool-btn" id="btn-zoom-in" title="放大">＋</button>
                     <button class="tool-btn" id="btn-zoom-out" title="縮小">－</button>
                     <button class="tool-btn" id="btn-reset" title="重設視角">↺</button>
+                    <button class="tool-btn" id="btn-fullscreen" title="全螢幕">⤢</button>
                 </div>
                 <div id="tooltip"></div>
                 <div id="tvchart"></div>
@@ -150,7 +147,7 @@ def render_interactive_chart(stock_id, years_to_show):
             <script>
                 const container = document.getElementById('tvchart-container');
                 const tooltip = document.getElementById('tooltip');
-                const volumeData = {volume_json}; // 接收從 Python 傳入的成交量字典
+                const volumeData = {volume_json};
 
                 const chart = LightweightCharts.createChart(document.getElementById('tvchart'), {{
                     layout: {{ background: {{ type: 'solid', color: '#131722' }}, textColor: '#d1d4dc' }},
@@ -159,22 +156,43 @@ def render_interactive_chart(stock_id, years_to_show):
                     timeScale: {{ rightOffset: 80 }}
                 }});
 
-                chart.priceScale('right').applyOptions({{ scaleMargins: {{ top: 0.1, bottom: 0.52 }} }});
+                // 主圖 K 線 (右側價格軸 1)
+                chart.priceScale('right').applyOptions({{ scaleMargins: {{ top: 0.05, bottom: 0.52 }} }});
                 const candleSeries = chart.addCandlestickSeries({{ upColor: '#ef5350', downColor: '#26a69a', borderVisible: false, wickUpColor: '#ef5350', wickDownColor: '#26a69a' }});
                 candleSeries.setData({candles_json});
 
-                // 其他指標線段設定...
+                // 均線 EMA
+                chart.addLineSeries({{ color: '#f5c211', lineWidth: 2 }}).setData({ema200_json});
+                chart.addLineSeries({{ color: '#e0591b', lineWidth: 2 }}).setData({ema209_json});
+
+                // DIF 指標 (副圖 1)
                 const difSeries = chart.addLineSeries({{ color: '#2962FF', lineWidth: 2, priceScaleId: 'dif_scale' }});
                 chart.priceScale('dif_scale').applyOptions({{ scaleMargins: {{ top: 0.49, bottom: 0.39 }} }});
                 difSeries.setData({dif_json});
 
-                // --- 新增：十字線即時資訊邏輯 ---
+                // ADX_300 指標 (副圖 2)
+                const adxSeries = chart.addLineSeries({{ color: '#FF1493', lineWidth: 2, priceScaleId: 'adx_scale' }});
+                chart.priceScale('adx_scale').applyOptions({{ scaleMargins: {{ top: 0.62, bottom: 0.26 }} }});
+                adxSeries.setData({adx_json});
+
+                // W%R 指標 (副圖 3)
+                const wrSeries = chart.addLineSeries({{ color: '#00BCD4', lineWidth: 2, priceScaleId: 'wr_scale' }});
+                chart.priceScale('wr_scale').applyOptions({{ scaleMargins: {{ top: 0.75, bottom: 0.13 }} }});
+                wrSeries.setData({wr_json});
+                wrSeries.createPriceLine({{ price: -20, color: '#FF9800', lineStyle: 2 }});
+
+                // 跡象評分直方圖 (副圖 4)
+                const scoreSeries = chart.addHistogramSeries({{ priceScaleId: 'score_scale' }});
+                chart.priceScale('score_scale').applyOptions({{ scaleMargins: {{ top: 0.88, bottom: 0.0 }} }});
+                scoreSeries.setData({score_json});
+                scoreSeries.createPriceLine({{ price: 3, color: '#FFEB3B', lineStyle: 0 }});
+
+                // 十字線互動邏輯
                 chart.subscribeCrosshairMove((param) => {{
                     if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {{
                         tooltip.style.display = 'none';
                         return;
                     }}
-
                     const data = param.seriesData.get(candleSeries);
                     if (!data) {{
                         tooltip.style.display = 'none';
@@ -198,31 +216,48 @@ def render_interactive_chart(stock_id, years_to_show):
                         </div>
                     `;
 
-                    // 自動調整位置，避免提示框超出容器邊界
-                    const width = 180;
-                    const height = 100;
-                    let left = param.point.x + 15;
-                    let top = param.point.y + 15;
-
+                    // 智慧位置定位
+                    const width = 180; const height = 100;
+                    let left = param.point.x + 15; let top = param.point.y + 15;
                     if (left + width > container.clientWidth) left = param.point.x - width - 15;
                     if (top + height > container.clientHeight) top = param.point.y - height - 15;
-
-                    tooltip.style.left = left + 'px';
-                    tooltip.style.top = top + 'px';
+                    tooltip.style.left = left + 'px'; tooltip.style.top = top + 'px';
                 }});
 
-                // 縮放與重設功能按鈕 (與之前邏輯相同)
-                document.getElementById('btn-zoom-in').onclick = () => {{ /* ...放大邏輯... */ }};
-                document.getElementById('btn-zoom-out').onclick = () => {{ /* ...縮小邏輯... */ }};
+                // 功能按鈕實作
+                document.getElementById('btn-zoom-in').onclick = () => {{
+                    const range = chart.timeScale().getVisibleLogicalRange();
+                    if (range) {{
+                        const diff = range.to - range.from;
+                        chart.timeScale().setVisibleLogicalRange({{ from: range.from + diff * 0.15, to: range.to - diff * 0.15 }});
+                    }}
+                }};
+                document.getElementById('btn-zoom-out').onclick = () => {{
+                    const range = chart.timeScale().getVisibleLogicalRange();
+                    if (range) {{
+                        const diff = range.to - range.from;
+                        chart.timeScale().setVisibleLogicalRange({{ from: range.from - diff * 0.15, to: range.to + diff * 0.15 }});
+                    }}
+                }};
                 document.getElementById('btn-reset').onclick = () => chart.timeScale().fitContent();
+                document.getElementById('btn-fullscreen').onclick = () => {{
+                    if (!document.fullscreenElement) container.requestFullscreen();
+                    else document.exitFullscreen();
+                }};
+
+                // RWD 尺寸調整
+                new ResizeObserver(entries => {{
+                    if (entries.length === 0) return;
+                    const newRect = entries[0].contentRect;
+                    chart.applyOptions({{ width: newRect.width, height: newRect.height }});
+                }}).observe(container);
 
                 chart.timeScale().fitContent();
             </script>
         </body>
         </html>
         """
-        components.html(html_code, height=750, scrolling=False)
-
+        components.html(html_code, height=770, scrolling=False)
     except Exception as e:
         st.error(f"圖表繪製發生錯誤：{e}")
 
