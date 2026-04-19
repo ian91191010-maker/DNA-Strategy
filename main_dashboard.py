@@ -35,6 +35,15 @@ audit_engine = BigBullAuditEngine()
 DRIVE_KEY_PATH = 'credentials.json'
 DRIVE_FOLDER_ID = '1SQze_GC0pDWf07fHCHOQJoATbPnyg7yX'
 
+@st.cache_data(ttl=12 * 3600)  # 快取保留 12 小時
+def get_cached_dna_stocks(key_path, folder_id):
+    """
+    使用快取機制抓取雲端名單。
+    只要參數相同，12 小時內都不會重新向 Google Drive 下載。
+    """
+    engine = DriveDataEngine(key_path, folder_id)
+    return engine.get_eligible_dna_stocks()
+
 # ==========================================
 # 1. 圖表渲染函式 (封裝 DNAstock.py 的邏輯)
 # ==========================================
@@ -303,6 +312,10 @@ with st.sidebar:
     finance_index_input = st.number_input("今日金融保險類指數 (Y)", min_value=0.0, value=0.0, step=0.1)
     btn_run_audit = st.button("啟動 / 更新雲端資料", type="primary", use_container_width=True)
 
+    if st.button("清除快取強制重抓", use_container_width=True):
+        st.cache_data.clear()
+        st.success("✅ 快取已清除，請再次點擊上方按鈕更新資料！")
+
 # ==========================================
 # 3. 主畫面 (Main Content)
 # ==========================================
@@ -334,8 +347,7 @@ if btn_run_audit:
                 st.session_state['sectors'] = audit_engine.audit_mainstream_sectors()
                 
                 # 2. 啟動 Google Drive 引擎
-                drive_engine = DriveDataEngine(DRIVE_KEY_PATH, DRIVE_FOLDER_ID)
-                master_list = drive_engine.get_eligible_dna_stocks()
+                master_list = get_cached_dna_stocks(DRIVE_KEY_PATH, DRIVE_FOLDER_ID)
                 
                 # 3. 掃描所有個股
                 results = []
