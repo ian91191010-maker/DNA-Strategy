@@ -201,7 +201,13 @@ def render_interactive_chart(stock_id, years_to_show):
 
                     tooltip.style.display = 'block';
                     const vol = volumeData[param.time] || 0;
-                    const volK = (vol / 1000).toFixed(1) + 'k';
+                    
+                    // 動態格式化成交量 (在 Python f-string 中使用 JS)
+                    let volK = vol;
+                    if (vol >= 1000) {{
+                        // 除以 1000 取小數點第一位，如果剛好是 .0 就去掉，最後加上大寫 K
+                        volK = (vol / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+                    }}
 
                     tooltip.innerHTML = `
                         <div style="font-weight: bold; color: #f5c211; margin-bottom: 4px;">${{param.time}}</div>
