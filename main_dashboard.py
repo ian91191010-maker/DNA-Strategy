@@ -199,18 +199,32 @@ def render_interactive_chart(stock_id, years_to_show):
                         return;
                     }}
 
-                    tooltip.style.display = 'block';
-                    const vol = volumeData[param.time] || 0;
-                    
-                    // 動態格式化成交量 (在 Python f-string 中使用 JS)
-                    let volK = vol;
-                    if (vol >= 1000) {{
-                        // 除以 1000 取小數點第一位，如果剛好是 .0 就去掉，最後加上大寫 K
-                        volK = (vol / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+                    // 1. 解決陷阱二：將圖表回傳的日期物件，轉回 YYYY-MM-DD 字串
+                    let dateStr = param.time;
+                    if (typeof param.time === 'object') {{
+                        const y = param.time.year;
+                        const m = String(param.time.month).padStart(2, '0');
+                        const d = String(param.time.day).padStart(2, '0');
+                        dateStr = y + '-' + m + '-' + d;
                     }}
 
+                    tooltip.style.display = 'block';
+                    
+                    // 用正確的日期字串去字典抓取原始成交量 (股)
+                    const rawVol = volumeData[dateStr] || 0; 
+                    
+                    // 2. 解決陷阱一：將「股」轉換為「張」
+                    const volLots = rawVol / 1000; 
+
+                    // 3. 處理 K 單位顯示邏輯 (大於等於 1000 張才顯示 K)
+                    let volK = volLots.toString();
+                    if (volLots >= 1000) {{
+                        volK = (volLots / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+                    }}
+
+                    // 更新提示框內容 (注意這裡使用 dateStr)
                     tooltip.innerHTML = `
-                        <div style="font-weight: bold; color: #f5c211; margin-bottom: 4px;">${{param.time}}</div>
+                        <div style="font-weight: bold; color: #f5c211; margin-bottom: 4px;">${{dateStr}}</div>
                         <div style="display: grid; grid-template-columns: auto auto; gap: 4px 12px;">
                             <span>開: <b style="color: #fff">${{data.open}}</b></span>
                             <span>高: <b style="color: #fff">${{data.high}}</b></span>
