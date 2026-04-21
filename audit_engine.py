@@ -343,7 +343,7 @@ class BigBullAuditEngine:
             if '急漲危機' in mod_g_status or '紅色警戒' in mod_g_status:
                 f_signals.append("大盤高檔警戒")
 
-            old_p = drive_data.get('最舊收盤價', row['close'])
+            old_p = float(drive_data.get('最舊收盤價', row['close'])) # 強制轉為浮點數
             true_change_pct = ((row['close'] - old_p) / old_p * 100) if old_p != 0 else 0.0
 
             return {
