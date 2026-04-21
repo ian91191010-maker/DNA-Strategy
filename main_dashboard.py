@@ -491,12 +491,12 @@ with col1:
         # --- 2. 渲染自訂顏色的 UI 區塊 (50% 透明度) ---
         # 使用 rgba(R, G, B, 0.5) 設定四種不同顏色的背景，0.5 代表 50% 透明度
         html_layout = f"""
-        <div style="background-color: rgba(38, 166, 154, 0.5); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+        <div style="background-color: rgba(38, 166, 154, 0.7); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
             <h4 style="margin: 0 0 10px 0; color: white;">環境燈號</h4>
             <span style="font-size: 16px; color: white;">{m_env.get('Env_Light', '尚未運算')}</span>
         </div>
         
-        <div style="background-color: rgba(239, 83, 80, 0.5); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+        <div style="background-color: rgba(239, 83, 80, 0.7); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
             <h4 style="margin: 0 0 10px 0; color: white;">轉折與趨勢</h4>
             <ul style="margin: 0; padding-left: 20px; color: white;">
                 <li>{streak_msg}</li>
@@ -504,15 +504,15 @@ with col1:
             </ul>
         </div>
         
-        <div style="background-color: rgba(255, 152, 0, 0.5); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-            <h4 style="margin: 0 0 10px 0; color: white;">末日鐘擺 (X-Y*10)</h4>
+        <div style="background-color: rgba(255, 152, 0, 0.7); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 10px 0; color: white;">末日鐘擺</h4>
             <ul style="margin: 0; padding-left: 20px; color: white;">
                 <li>狀態: {p_env.get('Doomsday_Status', '-')}</li>
                 <li>差值: {p_env.get('Doomsday_Val', '-')}</li>
             </ul>
         </div>
         
-        <div style="background-color: rgba(41, 98, 255, 0.5); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+        <div style="background-color: rgba(41, 98, 255, 0.7); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
             <h4 style="margin: 0 0 10px 0; color: white;">五大主流類股</h4>
             <ul style="margin: 0; padding-left: 20px; color: white;">
                 {sectors_html}
@@ -534,7 +534,7 @@ with col2:
             df_res = df_res.sort_values(by='漲跌幅 (%)', ascending=False).reset_index(drop=True)
             
             # 2. 刪除多餘欄位，只萃取你要求的四個欄位顯示在畫面上
-            display_df = df_res[['股號', '股名', '收盤價(最新日期)', '漲跌幅 (%)']]
+            display_df = df_res[['股號', '股名', '收盤價', '漲跌幅 (%)']]
             
             # 3. 顯示乾淨的表格並開啟點選功能
             event = st.dataframe(
