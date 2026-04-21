@@ -35,14 +35,31 @@ audit_engine = BigBullAuditEngine()
 DRIVE_KEY_PATH = 'credentials.json'
 DRIVE_FOLDER_ID = '1SQze_GC0pDWf07fHCHOQJoATbPnyg7yX'
 
-@st.cache_data(ttl=12 * 3600)  # 快取保留 12 小時
-def get_cached_dna_stocks(key_path, folder_id):
+# --- 新增：將最耗時的「全系統審計」打包成快取 ---
+@st.cache_data(ttl=12 * 3600)
+def run_full_system_audit(_audit_engine, finance_index, key_path, folder_id):
     """
-    使用快取機制抓取雲端名單。
-    只要參數相同，12 小時內都不會重新向 Google Drive 下載。
+    將大盤環境、資金鐘擺、主流類股以及所有個股的 DNA 審計全部打包。
+    12 小時內重複執行時，會直接回傳計算結果。
     """
-    engine = DriveDataEngine(key_path, folder_id)
-    return engine.get_eligible_dna_stocks()
+    # 1. 抓取大盤資料並審計
+    df_tse = fetch_finmind_data("TAIEX", years=5.0)
+    market_env = _audit_engine.audit_market(df_tse)
+    pendulum = _audit_engine.audit_pendulum(market_env.get('TSE_Close', 0), finance_index)
+    sectors = _audit_engine.audit_mainstream_sectors()
+    
+    # 2. 獲取 Drive 名單
+    master_list = get_cached_dna_stocks(key_path, folder_id)
+    
+    # 3. 掃描所有個股並執行 DNA 審計
+    results = []
+    if not master_list.empty:
+        for i, row in master_list.iterrows():
+            # 這裡會觸發各別個股的 K 線抓取與運算
+            res = _audit_engine.audit_stock_full(row['股號'], row.to_dict())
+            results.append(res)
+            
+    return market_env, pendulum, sectors, pd.DataFrame(results)
 
 # ==========================================
 # 1. 圖表渲染函式 (封裝 DNAstock.py 的邏輯)
@@ -132,38 +149,40 @@ def render_interactive_chart(stock_id, years_to_show):
                 
                 #chart-title {{ position: absolute; top: 15px; left: 15px; z-index: 10; color: #E0E3EB; font-size: 20px; font-weight: bold; pointer-events: none; }}
                 
-                #toolbar {{ 
-                    position: absolute; 
-                    top: 10px;          
-                    left: 50%;          
-                    transform: translateX(-50%); 
-                    z-index: 10; 
-                    display: flex; 
-                    gap: 5px;           
-                }}
+                /* 工具列按鈕 */
+                #toolbar {{ position: absolute; top: 15px; right: 60px; z-index: 10; display: flex; gap: 8px; }}
                 .tool-btn {{
-                    background: rgba(43, 43, 67, 0.8); 
-                    border: 1px solid #454559; 
-                    color: #E0E3EB; 
-                    cursor: pointer; 
-                    padding: 3px 10px;  
-                    border-radius: 4px; 
-                    font-size: 13px;    
-                    transition: background 0.2s;
+                    background: rgba(43, 43, 67, 0.8); border: 1px solid #454559; color: #E0E3EB; 
+                    cursor: pointer; padding: 6px 12px; border-radius: 4px; font-size: 16px; transition: background 0.2s;
                 }}
                 .tool-btn:hover {{ background: rgba(70, 70, 100, 1); }}
+
+                /* --- 新增：選取框與按鈕啟動樣式 --- */
+                #selection-box {{
+                    position: absolute;
+                    border: 1px solid #2196F3;
+                    background: rgba(33, 150, 243, 0.2);
+                    display: none;
+                    z-index: 100;
+                    pointer-events: none;
+                }}
+                .tool-btn.active {{
+                    background: rgba(33, 150, 243, 0.8);
+                    border-color: #2196F3;
+                }}
             </style>
         </head>
         <body>
             <div id="tvchart-container">
                 <div id="chart-title">{display_title}</div>
                 <div id="toolbar">
+                    <button class="tool-btn" id="btn-zoom-box" title="區域放大">⬚</button>
                     <button class="tool-btn" id="btn-zoom-in" title="放大">＋</button>
                     <button class="tool-btn" id="btn-zoom-out" title="縮小">－</button>
                     <button class="tool-btn" id="btn-reset" title="重設視角">↺</button>
                     <button class="tool-btn" id="btn-fullscreen" title="全螢幕">⤢</button>
                 </div>
-                <div id="tooltip"></div>
+                <div id="selection-box"></div> <div id="tooltip"></div>
                 <div id="tvchart"></div>
             </div>
             <script>
@@ -294,6 +313,70 @@ def render_interactive_chart(stock_id, years_to_show):
                     chart.applyOptions({{ width: newRect.width, height: newRect.height }});
                 }}).observe(container);
 
+                // 區域放大 (Zoom Box) 核心邏輯
+                const selectionBox = document.getElementById('selection-box');
+                const btnZoomBox = document.getElementById('btn-zoom-box');
+                let isZoomBoxMode = false;
+                let isDrawing = false;
+                let startX = 0;
+
+                btnZoomBox.onclick = () => {{
+                    isZoomBoxMode = !isZoomBoxMode;
+                    btnZoomBox.classList.toggle('active', isZoomBoxMode);
+                    container.style.cursor = isZoomBoxMode ? 'crosshair' : 'default';
+                }};
+
+                container.addEventListener('mousedown', (e) => {{
+                    if (!isZoomBoxMode) return;
+                    isDrawing = true;
+                    const rect = container.getBoundingClientRect();
+                    startX = e.clientX - rect.left;
+                    
+                    selectionBox.style.display = 'block';
+                    selectionBox.style.left = startX + 'px';
+                    selectionBox.style.width = '0px';
+                    selectionBox.style.top = '0px';
+                    selectionBox.style.height = '100%';
+                }});
+
+                container.addEventListener('mousemove', (e) => {{
+                    if (!isDrawing) return;
+                    const rect = container.getBoundingClientRect();
+                    const currentX = e.clientX - rect.left;
+                    
+                    const left = Math.min(startX, currentX);
+                    const width = Math.abs(currentX - startX);
+                    
+                    selectionBox.style.left = left + 'px';
+                    selectionBox.style.width = width + 'px';
+                }});
+
+                window.addEventListener('mouseup', (e) => {{
+                    if (!isDrawing) return;
+                    isDrawing = false;
+                    selectionBox.style.display = 'none';
+
+                    const rect = container.getBoundingClientRect();
+                    const endX = e.clientX - rect.left;
+
+                    const timeScale = chart.timeScale();
+                    const logicalStart = timeScale.coordinateToLogical(startX);
+                    const logicalEnd = timeScale.coordinateToLogical(endX);
+
+                    // 執行縮放 (確保有選取到超過1根K線)
+                    if (logicalStart !== null && logicalEnd !== null && Math.abs(logicalEnd - logicalStart) > 1) {{
+                        timeScale.setVisibleLogicalRange({{
+                            from: Math.min(logicalStart, logicalEnd),
+                            to: Math.max(logicalStart, logicalEnd)
+                        }});
+                    }}
+
+                    // 自動關閉放大模式，恢復一般拖曳
+                    isZoomBoxMode = false;
+                    btnZoomBox.classList.remove('active');
+                    container.style.cursor = 'default';
+                }});
+
                 chart.timeScale().fitContent();
             </script>
         </body>
@@ -346,34 +429,27 @@ with chart_container:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# --- 執行審計邏輯 ---
 if btn_run_audit:
     if finance_index_input == 0.0:
         st.sidebar.warning("⚠️ 請記得輸入金融保險類指數！")
     else:
-        with st.spinner("系統運算中，正在從 Google Drive 同步資料..."):
+        with st.spinner("系統運算中，正在從雲端快取或 Drive 同步資料..."):
             try:
-                # 1. 抓取大盤資料並審計
-                df_tse = fetch_finmind_data("TAIEX", years=5.0)
-                st.session_state['market_env'] = audit_engine.audit_market(df_tse)
-                st.session_state['pendulum'] = audit_engine.audit_pendulum(st.session_state['market_env'].get('TSE_Close', 0), finance_index_input)
-                st.session_state['sectors'] = audit_engine.audit_mainstream_sectors()
+                # 直接呼叫帶有快取的巨型函式
+                m_env, p_env, secs, df_res = run_full_system_audit(
+                    audit_engine, 
+                    finance_index_input, 
+                    DRIVE_KEY_PATH, 
+                    DRIVE_FOLDER_ID
+                )
                 
-                # 2. 啟動 Google Drive 引擎
-                master_list = get_cached_dna_stocks(DRIVE_KEY_PATH, DRIVE_FOLDER_ID)
+                # 將計算結果塞回 Session State 更新畫面
+                st.session_state['market_env'] = m_env
+                st.session_state['pendulum'] = p_env
+                st.session_state['sectors'] = secs
+                st.session_state['audit_results'] = df_res
                 
-                # 3. 掃描所有個股
-                results = []
-                progress_bar = st.progress(0)
-                for i, row in master_list.iterrows():
-                    res = audit_engine.audit_stock_full(row['股號'], row.to_dict())
-                    results.append(res)
-                    progress_bar.progress((i + 1) / len(master_list))
-                
-                # 將結果存入 Session State
-                st.session_state['audit_results'] = pd.DataFrame(results)
-                progress_bar.empty()
-                st.toast("✅ 審計完成！", icon="🎉")
+                st.toast("審計完成！", icon="✅")
                 
             except Exception as e:
                 st.error(f"執行發生錯誤: {e}")
