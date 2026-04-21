@@ -197,8 +197,8 @@ class DriveDataEngine:
             
             if has_consecutive and not is_missing:
                 group = group.sort_values('日期')
-                old_p = group.iloc[0]['收盤價']
-                file_new_p = group.iloc[-1]['收盤價']
+                old_p = float(group.iloc[0]['收盤價'])       # 強制轉為浮點數
+                file_new_p = float(group.iloc[-1]['收盤價']) # 強制轉為浮點數
                 stock_name = group.iloc[-1]['股名']
                 
                 from data_engine import fetch_finmind_data
