@@ -343,11 +343,14 @@ class BigBullAuditEngine:
             if '急漲危機' in mod_g_status or '紅色警戒' in mod_g_status:
                 f_signals.append("大盤高檔警戒")
 
+            old_p = drive_data.get('最舊收盤價', row['close'])
+            true_change_pct = ((row['close'] - old_p) / old_p * 100) if old_p != 0 else 0.0
+
             return {
                 "股號": stock_id,
-                "股名": drive_data.get('股名', '未知'), # 修正對應 Drive 的欄位名稱
-                "收盤價(最新日期)": drive_data.get('收盤價(最新日期)', round(row['close'], 2)),
-                "漲跌幅 (%)": drive_data.get('漲跌幅 (%)', 0.0), # 修正對應 Drive 的欄位名稱
+                "股名": drive_data.get('股名', '未知'),
+                "收盤價(最新日期)": round(row['close'], 2), # 絕對最新的市場現價
+                "漲跌幅 (%)": round(true_change_pct, 2),    # 絕對真實的累積漲跌幅
                 "判定狀態": "🟢 Pass" if is_dna_pass else "⚪ Fail",
                 "跡象評分": total_score,
                 "切入訊號": ", ".join(d_signals) if d_signals else "-",
