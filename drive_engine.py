@@ -96,7 +96,12 @@ class DriveDataEngine:
         while not done:
             _, done = downloader.next_chunk()
         fh.seek(0)
-        return pd.read_csv(fh, dtype=str, encoding='utf-8-sig')
+        
+        try:
+            return pd.read_csv(fh, dtype=str, encoding='utf-8-sig')
+        except pd.errors.EmptyDataError:
+            print("⚠️ 總表為空檔案，將自動重新建立資料。")
+            return pd.DataFrame()
 
     def upload_master_table(self, df: pd.DataFrame, file_id: str = None):
         """將最新的 DataFrame 上傳/覆蓋回 Google Drive"""
