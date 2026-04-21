@@ -150,10 +150,24 @@ def render_interactive_chart(stock_id, years_to_show):
                 #chart-title {{ position: absolute; top: 15px; left: 15px; z-index: 10; color: #E0E3EB; font-size: 20px; font-weight: bold; pointer-events: none; }}
                 
                 /* 工具列按鈕 */
-                #toolbar {{ position: absolute; top: 15px; right: 60px; z-index: 10; display: flex; gap: 8px; }}
+                #toolbar {{ 
+                    position: absolute; 
+                    top: 10px;          /* 稍微往上靠 */
+                    left: 50%;          /* 移到中間 */
+                    transform: translateX(-50%); /* 完美絕對置中 */
+                    z-index: 10; 
+                    display: flex; 
+                    gap: 4px;           /* 縮小按鈕間隔 */
+                }}
                 .tool-btn {{
-                    background: rgba(43, 43, 67, 0.8); border: 1px solid #454559; color: #E0E3EB; 
-                    cursor: pointer; padding: 6px 12px; border-radius: 4px; font-size: 16px; transition: background 0.2s;
+                    background: rgba(43, 43, 67, 0.8); 
+                    border: 1px solid #454559; 
+                    color: #E0E3EB; 
+                    cursor: pointer; 
+                    padding: 3px 8px;   /* 大幅縮小按鈕體積 */
+                    border-radius: 4px; 
+                    font-size: 13px;    /* 縮小圖示尺寸 */
+                    transition: background 0.2s;
                 }}
                 .tool-btn:hover {{ background: rgba(70, 70, 100, 1); }}
 
