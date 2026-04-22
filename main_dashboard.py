@@ -607,29 +607,44 @@ with layer3_bottom:
             """
             st.markdown(html_layout, unsafe_allow_html=True)
 
-    # 右欄：強勢股名單與加入自選按鈕
     with col2:
         st.subheader("強勢股名單")
         with st.container(border=True):
-            # ... (中間顯示 dataframe 的邏輯不變)
+            df_res = st.session_state['audit_results']
             
-            # 捕捉點擊事件
-            if len(event.selection.rows) > 0:
-                selected_idx = event.selection.rows[0]
-                clicked_ticker = str(display_df.iloc[selected_idx]["股號"]) 
-                clicked_name = str(display_df.iloc[selected_idx]["股名"])
+            # 檢查是否有資料
+            if not df_res.empty:
+                # 準備要顯示的表格資料
+                df_res = df_res.sort_values(by='漲跌幅 (%)', ascending=False).reset_index(drop=True)
+                display_df = df_res[['股號', '股名', '收盤價(最新日期)', '漲跌幅 (%)']]
                 
-                # 1. 自動更新上方 K 線圖 (這裡你原本就有 rerun，所以 K 線圖會動)
-                if clicked_ticker != st.session_state.get('selected_ticker', ''):
-                    st.session_state['selected_ticker'] = clicked_ticker
-                    st.rerun() 
+                # 畫出可互動的表格，並將結果存入 event
+                event = st.dataframe(
+                    display_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    selection_mode="single-row",
+                    on_select="rerun"
+                )
                 
-                # 2. 顯示按鈕
-                st.markdown(f"目前選中：**{clicked_name} ({clicked_ticker})**")
-                
-                if st.button("加入自選", key="btn_add_to_watch"):
-                    add_to_watchlist(clicked_ticker, clicked_name)
-                    st.rerun()  # <--- 加入這行，強制畫面重新渲染，讓第二層看到新標的
+                # 捕捉點擊事件
+                if len(event.selection.rows) > 0:
+                    selected_idx = event.selection.rows[0]
+                    clicked_ticker = str(display_df.iloc[selected_idx]["股號"]) 
+                    clicked_name = str(display_df.iloc[selected_idx]["股名"])
+                    
+                    # 1. 自動更新上方 K 線圖 
+                    if clicked_ticker != st.session_state.get('selected_ticker', ''):
+                        st.session_state['selected_ticker'] = clicked_ticker
+                        st.rerun() 
+                    
+                    # 2. 顯示按鈕
+                    st.markdown(f"目前選中：**{clicked_name} ({clicked_ticker})**")
+                    
+                    # 點擊後將股票加入自選並強制重新整理畫面
+                    if st.button("加入自選", key="btn_add_to_watch"):
+                        add_to_watchlist(clicked_ticker, clicked_name)
+                        st.rerun()
                         
             else:
                 st.info("請點擊左側「啟動 / 更新雲端資料」載入本日名單。")
