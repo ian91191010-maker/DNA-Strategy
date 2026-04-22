@@ -611,34 +611,25 @@ with layer3_bottom:
     with col2:
         st.subheader("強勢股名單")
         with st.container(border=True):
-            df_res = st.session_state['audit_results']
-            if not df_res.empty:
-                df_res = df_res.sort_values(by='漲跌幅 (%)', ascending=False).reset_index(drop=True)
-                display_df = df_res[['股號', '股名', '收盤價(最新日期)', '漲跌幅 (%)']]
+            # ... (中間顯示 dataframe 的邏輯不變)
+            
+            # 捕捉點擊事件
+            if len(event.selection.rows) > 0:
+                selected_idx = event.selection.rows[0]
+                clicked_ticker = str(display_df.iloc[selected_idx]["股號"]) 
+                clicked_name = str(display_df.iloc[selected_idx]["股名"])
                 
-                event = st.dataframe(
-                    display_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    selection_mode="single-row",
-                    on_select="rerun"
-                )
+                # 1. 自動更新上方 K 線圖 (這裡你原本就有 rerun，所以 K 線圖會動)
+                if clicked_ticker != st.session_state.get('selected_ticker', ''):
+                    st.session_state['selected_ticker'] = clicked_ticker
+                    st.rerun() 
                 
-                # 捕捉點擊事件
-                if len(event.selection.rows) > 0:
-                    selected_idx = event.selection.rows[0]
-                    clicked_ticker = str(display_df.iloc[selected_idx]["股號"]) 
-                    clicked_name = str(display_df.iloc[selected_idx]["股名"])
-                    
-                    # 1. 自動更新上方 K 線圖
-                    if clicked_ticker != st.session_state.get('selected_ticker', ''):
-                        st.session_state['selected_ticker'] = clicked_ticker
-                        st.rerun() 
-                    
-                    # 2. 顯示按鈕，讓你可以把選中的股票加入自選
-                    st.markdown(f"目前選中：**{clicked_name} ({clicked_ticker})**")
-                    if st.button("加入自選", key="btn_add_to_watch"):
-                        add_to_watchlist(clicked_ticker, clicked_name)
+                # 2. 顯示按鈕
+                st.markdown(f"目前選中：**{clicked_name} ({clicked_ticker})**")
+                
+                if st.button("加入自選", key="btn_add_to_watch"):
+                    add_to_watchlist(clicked_ticker, clicked_name)
+                    st.rerun()  # <--- 加入這行，強制畫面重新渲染，讓第二層看到新標的
                         
             else:
                 st.info("請點擊左側「啟動 / 更新雲端資料」載入本日名單。")
