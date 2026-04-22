@@ -120,6 +120,59 @@ class DriveDataEngine:
             print("✅ 已建立全新的總表並上傳至 Google Drive！")
 
     # ==========================================
+    # 自選股 (Watchlist) 處理 (雲端同步)
+    # ==========================================
+    def get_watchlist_info(self) -> dict:
+        """尋找雲端資料夾中是否已有 Watchlist.csv"""
+        query = f"'{self.folder_id}' in parents and name='Watchlist.csv' and trashed=false"
+        results = self.service.files().list(q=query, fields="files(id, name)").execute()
+        files = results.get('files', [])
+        return files[0] if files else None
+
+    def load_watchlist(self) -> pd.DataFrame:
+        """從 Google Drive 下載自選股清單，若無則建立空的 DataFrame"""
+        file_info = self.get_watchlist_info()
+        
+        if file_info:
+            request = self.service.files().get_media(fileId=file_info['id'])
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+            fh.seek(0)
+            
+            try:
+                # 關鍵：指定 dtype 保留股號的字串格式 (例如 "0050" 不會變成 "50")
+                df = pd.read_csv(fh, dtype={'stock_id': str, 'stock_name': str}, encoding='utf-8-sig')
+                return df
+            except pd.errors.EmptyDataError:
+                pass # 若是不小心建立了空檔案，就跳過往下執行
+                
+        # 雲端找不到檔案，或是空檔案時，預設回傳帶有欄位的空 DataFrame
+        return pd.DataFrame(columns=['stock_id', 'stock_name'])
+
+    def save_watchlist(self, df: pd.DataFrame):
+        """將最新的自選股 DataFrame 同步回 Google Drive"""
+        file_info = self.get_watchlist_info()
+        
+        csv_buffer = io.BytesIO()
+        df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
+        csv_buffer.seek(0)
+        
+        media = MediaIoBaseUpload(csv_buffer, mimetype='text/csv', resumable=True)
+        
+        if file_info:
+            # 雲端已有檔案，執行更新 (Update)
+            self.service.files().update(fileId=file_info['id'], media_body=media).execute()
+            print("✅ 自選股已成功更新至 Google Drive！")
+        else:
+            # 雲端無檔案，執行建立 (Create)
+            file_metadata = {'name': 'Watchlist.csv', 'parents': [self.folder_id]}
+            self.service.files().create(body=file_metadata, media_body=media).execute()
+            print("✅ 已建立全新的自選股清單並上傳至 Google Drive！")
+
+    # ==========================================
     # 核心邏輯：增量更新與條件篩選
     # ==========================================
     def get_eligible_dna_stocks(self) -> pd.DataFrame:
