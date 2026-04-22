@@ -28,19 +28,45 @@ if 'sectors' not in st.session_state:
 if 'pendulum' not in st.session_state:
     st.session_state['pendulum'] = {}
 
-# 初始化審計引擎
-audit_engine = BigBullAuditEngine()
-
 # 設定你的 Google Drive 參數 (請修改為你的真實 ID)
 DRIVE_KEY_PATH = 'credentials.json'
 DRIVE_FOLDER_ID = '1SQze_GC0pDWf07fHCHOQJoATbPnyg7yX'
 
-# --- 新增：將最耗時的「全系統審計」打包成快取 ---
+# --- 新增：初始化 Google Drive 引擎 (用來存取總表與自選股) ---
+drive_engine_instance = DriveDataEngine(DRIVE_KEY_PATH, DRIVE_FOLDER_ID)
+
+# --- 新增：初始化自選股 Session State ---
+if 'watchlist_df' not in st.session_state:
+    st.session_state['watchlist_df'] = drive_engine_instance.load_watchlist()
+
+# --- 新增：自選股輔助函式 ---
+def add_to_watchlist(stock_id, stock_name):
+    df = st.session_state['watchlist_df']
+    # 確保比對時都是字串
+    if str(stock_id) not in df['stock_id'].values:
+        new_row = pd.DataFrame({'stock_id': [str(stock_id)], 'stock_name': [stock_name]})
+        updated_df = pd.concat([df, new_row], ignore_index=True)
+        st.session_state['watchlist_df'] = updated_df
+        drive_engine_instance.save_watchlist(updated_df)
+        st.toast(f"已將 {stock_name} 加入自選！")
+    else:
+        st.warning("這檔股票已經在您的自選清單中囉！")
+
+def remove_from_watchlist(stock_id):
+    df = st.session_state['watchlist_df']
+    updated_df = df[df['stock_id'] != str(stock_id)]
+    st.session_state['watchlist_df'] = updated_df
+    drive_engine_instance.save_watchlist(updated_df)
+    st.toast("已成功移除自選股！")
+
+# 初始化審計引擎
+audit_engine = BigBullAuditEngine()
+
 @st.cache_data(ttl=12 * 3600)
 def run_full_system_audit(_audit_engine, finance_index, key_path, folder_id):
     """
     將大盤環境、資金鐘擺、主流類股以及所有個股的 DNA 審計全部打包。
-    12 小時內重複執行時，會直接回傳計算結果。
+    12 小時內重複執行時，會直接從記憶體秒傳結果，跳過所有 API 抓取與運算。
     """
     # 1. 抓取大盤資料並審計
     df_tse = fetch_finmind_data("TAIEX", years=5.0)
@@ -48,14 +74,14 @@ def run_full_system_audit(_audit_engine, finance_index, key_path, folder_id):
     pendulum = _audit_engine.audit_pendulum(market_env.get('TSE_Close', 0), finance_index)
     sectors = _audit_engine.audit_mainstream_sectors()
     
-    # 2. 獲取 Drive 名單
-    master_list = get_cached_dna_stocks(key_path, folder_id)
+    # 2. 獲取 Drive 名單 (修正：使用 DriveDataEngine 來獲取名單)
+    temp_drive_engine = DriveDataEngine(key_path, folder_id)
+    master_list = temp_drive_engine.get_eligible_dna_stocks()
     
     # 3. 掃描所有個股並執行 DNA 審計
     results = []
     if not master_list.empty:
         for i, row in master_list.iterrows():
-            # 這裡會觸發各別個股的 K 線抓取與運算
             res = _audit_engine.audit_stock_full(row['股號'], row.to_dict())
             results.append(res)
             
@@ -147,31 +173,50 @@ def render_interactive_chart(stock_id, years_to_show):
                     border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 6px rgba(0,0,0,0.3);
                 }}
                 
-                #chart-title {{ position: absolute; top: 15px; left: 15px; z-index: 10; color: #E0E3EB; font-size: 20px; font-weight: bold; pointer-events: none; }}
-                
-                /* 工具列按鈕 */
-                #toolbar {{ 
-                    position: absolute; 
-                    top: 10px;          /* 稍微往上靠 */
-                    left: 50%;          /* 移到中間 */
-                    transform: translateX(-50%); /* 完美絕對置中 */
-                    z-index: 10; 
-                    display: flex; 
-                    gap: 4px;           /* 縮小按鈕間隔 */
+                #overlay-header {{
+                    position: absolute;
+                    top: 10px;
+                    left: 15px;
+                    right: 65px;
+                    z-index: 10;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    pointer-events: none;
                 }}
+                
+                #chart-title {{ 
+                    color: #E0E3EB; 
+                    font-size: 18px;
+                    font-weight: bold; 
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    margin-right: 10px;
+                }}
+                
+                #toolbar {{ 
+                    display: flex; 
+                    gap: 4px; 
+                    pointer-events: auto;
+                }}
+                
                 .tool-btn {{
                     background: rgba(43, 43, 67, 0.8); 
                     border: 1px solid #454559; 
                     color: #E0E3EB; 
                     cursor: pointer; 
-                    padding: 3px 8px;   /* 大幅縮小按鈕體積 */
+                    padding: 4px 8px;  
                     border-radius: 4px; 
-                    font-size: 13px;    /* 縮小圖示尺寸 */
+                    font-size: 13px;    
                     transition: background 0.2s;
                 }}
                 .tool-btn:hover {{ background: rgba(70, 70, 100, 1); }}
+                .tool-btn.active {{
+                    background: rgba(33, 150, 243, 0.8);
+                    border-color: #2196F3;
+                }}
 
-                /* --- 新增：選取框與按鈕啟動樣式 --- */
                 #selection-box {{
                     position: absolute;
                     border: 1px solid #2196F3;
@@ -188,15 +233,19 @@ def render_interactive_chart(stock_id, years_to_show):
         </head>
         <body>
             <div id="tvchart-container">
-                <div id="chart-title">{display_title}</div>
-                <div id="toolbar">
-                    <button class="tool-btn" id="btn-zoom-box" title="區域放大">⬚</button>
-                    <button class="tool-btn" id="btn-zoom-in" title="放大">＋</button>
-                    <button class="tool-btn" id="btn-zoom-out" title="縮小">－</button>
-                    <button class="tool-btn" id="btn-reset" title="重設視角">↺</button>
-                    <button class="tool-btn" id="btn-fullscreen" title="全螢幕">⤢</button>
+                <div id="overlay-header">
+                    <div id="chart-title">{display_title}</div>
+                    <div id="toolbar">
+                        <button class="tool-btn" id="btn-zoom-box" title="區域放大">⬚</button>
+                        <button class="tool-btn" id="btn-zoom-in" title="放大">＋</button>
+                        <button class="tool-btn" id="btn-zoom-out" title="縮小">－</button>
+                        <button class="tool-btn" id="btn-reset" title="重設視角">↺</button>
+                        <button class="tool-btn" id="btn-fullscreen" title="全螢幕">⤢</button>
+                    </div>
                 </div>
-                <div id="selection-box"></div> <div id="tooltip"></div>
+                
+                <div id="selection-box"></div>
+                <div id="tooltip"></div>
                 <div id="tvchart"></div>
             </div>
             <script>
@@ -427,22 +476,24 @@ with st.sidebar:
         st.success("✅ 快取已清除，請再次點擊上方按鈕更新資料！")
 
 # ==========================================
-# 3. 主畫面 (Main Content)
+# 3. 主畫面 (Main Content) 三層式版面配置
 # ==========================================
 st.markdown("<h3 style='text-align: center;'>大飆股 DNA 系統審計看板</h3>", unsafe_allow_html=True)
 
-# --- 圖表區塊 ---
-chart_container = st.container(border=True)
-with chart_container:
-    st.subheader("K 線與指標")
-    if st.session_state['selected_ticker']:
-        with st.spinner(f"正在繪製 {st.session_state['selected_ticker']} 圖表..."):
-            render_interactive_chart(st.session_state['selected_ticker'], years_to_show)
-    else:
-        st.markdown("<div style='height: 300px; display: flex; align-items: center; justify-content: center; color: gray;'>等待選擇標的...</div>", unsafe_allow_html=True)
+# ------------------------------------------
+# 第一層：K 線圖區域
+# ------------------------------------------
+layer1_kline = st.container()
+with layer1_kline:
+    with st.container(border=True):
+        st.subheader("K 線與指標")
+        if st.session_state['selected_ticker']:
+            with st.spinner(f"正在繪製 {st.session_state['selected_ticker']} 圖表..."):
+                render_interactive_chart(st.session_state['selected_ticker'], years_to_show)
+        else:
+            st.markdown("<div style='height: 300px; display: flex; align-items: center; justify-content: center; color: gray;'>等待選擇標的...</div>", unsafe_allow_html=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
-
+# --- 將原本的按鈕更新邏輯放在第一層下方 ---
 if btn_run_audit:
     if finance_index_input == 0.0:
         st.sidebar.warning("⚠️ 請記得輸入金融保險類指數！")
@@ -457,102 +508,137 @@ if btn_run_audit:
                     DRIVE_FOLDER_ID
                 )
                 
-                # 將計算結果塞回 Session State 更新畫面
                 st.session_state['market_env'] = m_env
                 st.session_state['pendulum'] = p_env
                 st.session_state['sectors'] = secs
                 st.session_state['audit_results'] = df_res
-                
                 st.toast("審計完成！", icon="✅")
-                
             except Exception as e:
                 st.error(f"執行發生錯誤: {e}")
 
-# --- 數據區塊 (左右分欄) ---
-col1, col2 = st.columns([1, 2])
+st.divider() # 加入分隔線
 
-# 左欄：大盤環境
-with col1:
-    st.subheader("大盤環境與風險")
-    with st.container(border=True):
-        m_env = st.session_state.get('market_env', {})
-        p_env = st.session_state.get('pendulum', {})
-        
-        # --- 1. 數值預處理 ---
-        import re
-        # 利用正則表達式，攔截字串中的浮點數並轉為整數 (例如 9.0 -> 9, 5.5 -> 5)
-        raw_streak = m_env.get('Streak_Msg', '-')
-        streak_msg = re.sub(r'\d+\.\d+', lambda x: str(int(float(x.group()))), raw_streak)
-        
-        # 處理五大主流類股的列表格式
-        sectors = st.session_state.get('sectors', [])
-        sectors_html = "".join([f"<li>{s}</li>" for s in sectors]) if sectors else "<li>尚未運算</li>"
-        
-        # --- 2. 渲染自訂顏色的 UI 區塊 (50% 透明度) ---
-        # 使用 rgba(R, G, B, 0.5) 設定四種不同顏色的背景，0.5 代表 50% 透明度
-        html_layout = f"""
-        <div style="background-color: rgba(38, 166, 154, 0.7); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-            <h4 style="margin: 0 0 10px 0; color: white;">環境燈號</h4>
-            <span style="font-size: 16px; color: white;">{m_env.get('Env_Light', '尚未運算')}</span>
-        </div>
-        
-        <div style="background-color: rgba(239, 83, 80, 0.7); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-            <h4 style="margin: 0 0 10px 0; color: white;">轉折與趨勢</h4>
-            <ul style="margin: 0; padding-left: 20px; color: white;">
-                <li>{streak_msg}</li>
-                <li>系統風險: {m_env.get('Mod_G', '-')}</li>
-            </ul>
-        </div>
-        
-        <div style="background-color: rgba(255, 152, 0, 0.7); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-            <h4 style="margin: 0 0 10px 0; color: white;">末日鐘擺</h4>
-            <ul style="margin: 0; padding-left: 20px; color: white;">
-                <li>狀態: {p_env.get('Doomsday_Status', '-')}</li>
-                <li>差值: {p_env.get('Doomsday_Val', '-')}</li>
-            </ul>
-        </div>
-        
-        <div style="background-color: rgba(41, 98, 255, 0.7); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-            <h4 style="margin: 0 0 10px 0; color: white;">五大主流類股</h4>
-            <ul style="margin: 0; padding-left: 20px; color: white;">
-                {sectors_html}
-            </ul>
-        </div>
-        """
-        
-        # 透過 st.markdown 輸出 HTML
-        st.markdown(html_layout, unsafe_allow_html=True)
-
-# 右欄：Pass/Fail 名單
-with col2:
-    st.subheader("強勢股名單")
-    with st.container(border=True):
-        df_res = st.session_state['audit_results']
-        if not df_res.empty:
+# ------------------------------------------
+# 第二層：我的自選股區域
+# ------------------------------------------
+layer2_watchlist = st.container()
+with layer2_watchlist:
+    st.subheader("我的自選股")
+    
+    watch_df = st.session_state['watchlist_df']
+    
+    if watch_df.empty:
+        st.info("目前清單空空的，快去下方挑選潛力股吧！")
+    else:
+        # 將畫面切為左右，左邊看表格，右邊做操作
+        col_w1, col_w2 = st.columns([2, 1])
+        with col_w1:
+            st.dataframe(watch_df, use_container_width=True, hide_index=True)
             
-            # 1. 確保以「漲跌幅 (%)」由高到低排序
-            df_res = df_res.sort_values(by='漲跌幅 (%)', ascending=False).reset_index(drop=True)
-            
-            # 2. 刪除多餘欄位，只萃取你要求的四個欄位顯示在畫面上
-            display_df = df_res[['股號', '股名', '收盤價', '漲跌幅 (%)']]
-            
-            # 3. 顯示乾淨的表格並開啟點選功能
-            event = st.dataframe(
-                display_df,
-                use_container_width=True,
-                hide_index=True,
-                selection_mode="single-row",
-                on_select="rerun"
+        with col_w2:
+            st.write("**自選股操作**")
+            target_stock = st.selectbox(
+                "請選擇要操作的自選股：", 
+                options=watch_df['stock_id'].tolist(),
+                format_func=lambda x: f"{x} - {watch_df[watch_df['stock_id']==x]['stock_name'].values[0]}"
             )
             
-            # 捕捉點擊事件，更新上方圖表 (邏輯需對應 display_df)
-            if len(event.selection.rows) > 0:
-                selected_idx = event.selection.rows[0]
-                clicked_ticker = str(display_df.iloc[selected_idx]["股號"]) 
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("載入 K 線圖", key="btn_load_watch_kline"):
+                    st.session_state['selected_ticker'] = target_stock
+                    st.rerun() # 更新完標的後重新整理畫面畫圖
+            with c2:
+                if st.button("移除此檔", key="btn_remove_watch"):
+                    remove_from_watchlist(target_stock)
+                    st.rerun()
+
+st.divider() # 加入分隔線
+
+# ------------------------------------------
+# 第三層：大盤環境與強勢股名單 (左右分欄)
+# ------------------------------------------
+layer3_bottom = st.container()
+with layer3_bottom:
+    col1, col2 = st.columns([1, 2])
+
+    # 左欄：大盤環境 (保留你原本精美的 HTML 版面)
+    with col1:
+        st.subheader("大盤環境與風險")
+        with st.container(border=True):
+            m_env = st.session_state.get('market_env', {})
+            p_env = st.session_state.get('pendulum', {})
+            
+            import re
+            raw_streak = m_env.get('Streak_Msg', '-')
+            streak_msg = re.sub(r'\d+\.\d+', lambda x: str(int(float(x.group()))), raw_streak)
+            
+            sectors = st.session_state.get('sectors', [])
+            sectors_html = "".join([f"<li>{s}</li>" for s in sectors]) if sectors else "<li>尚未運算</li>"
+            
+            html_layout = f"""
+            <div style="background-color: rgba(38, 166, 154, 0.5); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                <h4 style="margin: 0 0 10px 0; color: white;">環境燈號</h4>
+                <span style="font-size: 16px; color: white;">{m_env.get('Env_Light', '尚未運算')}</span>
+            </div>
+            
+            <div style="background-color: rgba(239, 83, 80, 0.5); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                <h4 style="margin: 0 0 10px 0; color: white;">轉折與趨勢</h4>
+                <ul style="margin: 0; padding-left: 20px; color: white;">
+                    <li>{streak_msg}</li>
+                    <li>系統風險: {m_env.get('Mod_G', '-')}</li>
+                </ul>
+            </div>
+            
+            <div style="background-color: rgba(255, 152, 0, 0.5); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                <h4 style="margin: 0 0 10px 0; color: white;">末日鐘擺 (X-Y*10)</h4>
+                <ul style="margin: 0; padding-left: 20px; color: white;">
+                    <li>狀態: {p_env.get('Doomsday_Status', '-')}</li>
+                    <li>差值: {p_env.get('Doomsday_Val', '-')}</li>
+                </ul>
+            </div>
+            
+            <div style="background-color: rgba(41, 98, 255, 0.5); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                <h4 style="margin: 0 0 10px 0; color: white;">五大主流類股</h4>
+                <ul style="margin: 0; padding-left: 20px; color: white;">
+                    {sectors_html}
+                </ul>
+            </div>
+            """
+            st.markdown(html_layout, unsafe_allow_html=True)
+
+    # 右欄：強勢股名單與加入自選按鈕
+    with col2:
+        st.subheader("強勢股名單")
+        with st.container(border=True):
+            df_res = st.session_state['audit_results']
+            if not df_res.empty:
+                df_res = df_res.sort_values(by='漲跌幅 (%)', ascending=False).reset_index(drop=True)
+                display_df = df_res[['股號', '股名', '收盤價(最新日期)', '漲跌幅 (%)']]
                 
-                if clicked_ticker != st.session_state.get('selected_ticker', ''):
-                    st.session_state['selected_ticker'] = clicked_ticker
-                    st.rerun() 
+                event = st.dataframe(
+                    display_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    selection_mode="single-row",
+                    on_select="rerun"
+                )
+                
+                # 捕捉點擊事件
+                if len(event.selection.rows) > 0:
+                    selected_idx = event.selection.rows[0]
+                    clicked_ticker = str(display_df.iloc[selected_idx]["股號"]) 
+                    clicked_name = str(display_df.iloc[selected_idx]["股名"])
                     
-        else:
-            st.info("請點擊左側「啟動 / 更新雲端資料」載入本日名單。")
+                    # 1. 自動更新上方 K 線圖
+                    if clicked_ticker != st.session_state.get('selected_ticker', ''):
+                        st.session_state['selected_ticker'] = clicked_ticker
+                        st.rerun() 
+                    
+                    # 2. 顯示按鈕，讓你可以把選中的股票加入自選
+                    st.markdown(f"目前選中：**{clicked_name} ({clicked_ticker})**")
+                    if st.button("加入自選", key="btn_add_to_watch"):
+                        add_to_watchlist(clicked_ticker, clicked_name)
+                        
+            else:
+                st.info("請點擊左側「啟動 / 更新雲端資料」載入本日名單。")
