@@ -140,12 +140,21 @@ class DriveDataEngine:
             done = False
             while not done:
                 _, done = downloader.next_chunk()
-            fh.seek(0)
             
             try:
-                # 關鍵：指定 dtype 保留股號的字串格式 (例如 "0050" 不會變成 "50")
-                df = pd.read_csv(fh, dtype={'stock_id': str, 'stock_name': str}, encoding='utf-8-sig')
-                return df
+                # 1. 優先嘗試標準 UTF-8 讀取
+                fh.seek(0)
+                return pd.read_csv(fh, dtype={'stock_id': str, 'stock_name': str}, encoding='utf-8-sig')
+            
+            except UnicodeDecodeError:
+                # 2. 🛡️ 防彈機制：如果發生編碼錯誤 (Windows 預設存檔)，自動退回使用 Big5 解析
+                print("⚠️ 偵測到非 UTF-8 編碼，切換為 Big5 解析模式...")
+                fh.seek(0)
+                try:
+                    return pd.read_csv(fh, dtype={'stock_id': str, 'stock_name': str}, encoding='big5')
+                except Exception as e:
+                    print(f"檔案解析徹底失敗: {e}")
+                    
             except pd.errors.EmptyDataError:
                 pass # 若是不小心建立了空檔案，就跳過往下執行
                 
