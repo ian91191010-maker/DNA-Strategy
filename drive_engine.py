@@ -254,13 +254,7 @@ class DriveDataEngine:
                 file_new_p = float(group.iloc[-1]['收盤價']) # 強制轉為浮點數
                 stock_name = group.iloc[-1]['股名']
                 
-                from data_engine import fetch_finmind_data
-                df_live = fetch_finmind_data(sid, years=0.1)
-                if not df_live.empty:
-                    real_new_p = df_live['close'].iloc[-1]
-                else:
-                    real_new_p = file_new_p
-                
+                real_new_p = file_new_p
                 true_change_pct = ((real_new_p - old_p) / old_p * 100) if old_p != 0 else 0.0
                 
                 eligible_stocks.append({
