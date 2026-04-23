@@ -68,8 +68,6 @@ def run_full_system_audit(_audit_engine, finance_index, key_path, folder_id):
     將大盤環境、資金鐘擺、主流類股以及所有個股的 DNA 審計全部打包。
     12 小時內重複執行時，會直接從記憶體秒傳結果，跳過所有 API 抓取與運算。
     """
-    import streamlit as st
-    
     # 1. 抓取大盤資料並審計
     df_tse = fetch_finmind_data("TAIEX", years=5.0)
     market_env = _audit_engine.audit_market(df_tse)
@@ -77,32 +75,15 @@ def run_full_system_audit(_audit_engine, finance_index, key_path, folder_id):
     sectors = _audit_engine.audit_mainstream_sectors()
     
     # 2. 獲取 Drive 名單
-    st.toast("正在與 Google Drive 進行同步...", icon="🔄")
     temp_drive_engine = DriveDataEngine(key_path, folder_id)
     master_list = temp_drive_engine.get_eligible_dna_stocks()
     
     # 3. 掃描所有個股並執行 DNA 審計
     results = []
-    total_stocks = len(master_list)
-    
-    if total_stocks > 0:
-        # 🌟 建立進度條與狀態文字 🌟
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
+    if not master_list.empty:
         for i, row in master_list.iterrows():
-            current = i + 1
-            # 更新畫面上的進度與文字
-            status_text.text(f"正在運算個股: {row['股號']} {row['股名']} ({current}/{total_stocks})")
-            progress_bar.progress(current / total_stocks)
-            
-            # 執行審計
             res = _audit_engine.audit_stock_full(row['股號'], row.to_dict())
             results.append(res)
-            
-        # 跑完後清空進度條，讓畫面保持乾淨
-        status_text.empty()
-        progress_bar.empty()
             
     return market_env, pendulum, sectors, pd.DataFrame(results)
 
@@ -568,9 +549,7 @@ with layer2_watchlist:
                     st.session_state['selected_ticker'] = target_stock
                     st.rerun() # 更新完標的後重新整理畫面畫圖
             with c2:
-                if st.button("移除此檔", key="btn_remove_watch"):
-                    remove_from_watchlist(target_stock)
-                    st.rerun()
+                st.button("❌ 移除此檔", key="btn_remove_watch", on_click=remove_from_watchlist, args=(target_stock,))
 
 st.divider() # 加入分隔線
 
@@ -661,9 +640,7 @@ with layer3_bottom:
                     st.markdown(f"目前選中：**{clicked_name} ({clicked_ticker})**")
                     
                     # 點擊後將股票加入自選並強制重新整理畫面
-                    if st.button("加入自選", key="btn_add_to_watch"):
-                        add_to_watchlist(clicked_ticker, clicked_name)
-                        st.rerun()
+                    st.button("加入自選", key="btn_add_to_watch", on_click=add_to_watchlist, args=(clicked_ticker, clicked_name))
                         
             else:
                 st.info("請點擊左側「啟動 / 更新雲端資料」載入本日名單。")
