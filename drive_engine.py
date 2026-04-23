@@ -161,34 +161,52 @@ class DriveDataEngine:
         # 雲端找不到檔案，或是空檔案時，預設回傳帶有欄位的空 DataFrame
         return pd.DataFrame(columns=['stock_id', 'stock_name'])
 
-    def save_watchlist(self, df: pd.DataFrame):
-        """將最新的自選股 DataFrame 同步回 Google Drive"""
+    def load_watchlist(self) -> pd.DataFrame:
+        """從 Google Drive 下載自選股清單，具備終極容錯與強制修正機制"""
         file_info = self.get_watchlist_info()
-        
-        csv_buffer = io.BytesIO()
-        df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
-        csv_buffer.seek(0)
-        
-        # 🌟 修正 1：將 resumable 改為 False，防止 Streamlit Cloud 對極小檔案上傳報錯
-        media = MediaIoBaseUpload(csv_buffer, mimetype='text/csv', resumable=False)
+        default_df = pd.DataFrame(columns=['stock_id', 'stock_name'])
         
         if file_info:
-            # 雲端已有檔案，執行更新 (Update)
-            self.service.files().update(
-                fileId=file_info['id'], 
-                media_body=media,
-                supportsAllDrives=True # 🌟 修正 2：支援團隊共用雲端硬碟
-            ).execute()
-            print("✅ 自選股已成功更新至 Google Drive！")
-        else:
-            # 雲端無檔案，執行建立 (Create)
-            file_metadata = {'name': 'Watchlist.csv', 'parents': [self.folder_id]}
-            self.service.files().create(
-                body=file_metadata, 
-                media_body=media,
-                supportsAllDrives=True # 🌟 修正 2：支援團隊共用雲端硬碟
-            ).execute()
-            print("✅ 已建立全新的自選股清單並上傳至 Google Drive！")
+            request = self.service.files().get_media(fileId=file_info['id'])
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+            
+            try:
+                fh.seek(0)
+                try:
+                    # 優先嘗試 UTF-8 讀取
+                    df = pd.read_csv(fh, encoding='utf-8-sig')
+                except UnicodeDecodeError:
+                    # 退回 Big5 讀取
+                    fh.seek(0)
+                    df = pd.read_csv(fh, encoding='big5')
+                    
+                # 🛡️ 終極防彈機制：檢查並強制修正欄位
+                if df.empty:
+                    return default_df
+                    
+                if 'stock_id' not in df.columns:
+                    # 如果使用者打錯字或用了全形逗號，只要資料剛好是兩欄，就強行幫它改名
+                    if len(df.columns) == 2:
+                        df.columns = ['stock_id', 'stock_name']
+                    else:
+                        # 格式徹底爛掉，直接回傳空清單，讓程式重新幫你建一個完美的
+                        return default_df 
+                        
+                # 確保股號是字串，且自動補齊開頭的 0 (把 Excel 自動縮寫的 50 變回 0050)
+                df['stock_id'] = df['stock_id'].astype(str).str.zfill(4)
+                df['stock_name'] = df['stock_name'].astype(str)
+                return df
+                
+            except Exception as e:
+                print(f"檔案解析失敗，啟用預設空清單: {e}")
+                return default_df
+                
+        # 如果雲端完全沒檔案，回傳空清單
+        return default_df
 
     # ==========================================
     # 核心邏輯：增量更新與條件篩選
