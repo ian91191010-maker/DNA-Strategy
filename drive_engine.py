@@ -160,16 +160,25 @@ class DriveDataEngine:
         df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
         csv_buffer.seek(0)
         
-        media = MediaIoBaseUpload(csv_buffer, mimetype='text/csv', resumable=True)
+        # 🌟 修正 1：將 resumable 改為 False，防止 Streamlit Cloud 對極小檔案上傳報錯
+        media = MediaIoBaseUpload(csv_buffer, mimetype='text/csv', resumable=False)
         
         if file_info:
             # 雲端已有檔案，執行更新 (Update)
-            self.service.files().update(fileId=file_info['id'], media_body=media).execute()
+            self.service.files().update(
+                fileId=file_info['id'], 
+                media_body=media,
+                supportsAllDrives=True # 🌟 修正 2：支援團隊共用雲端硬碟
+            ).execute()
             print("✅ 自選股已成功更新至 Google Drive！")
         else:
             # 雲端無檔案，執行建立 (Create)
             file_metadata = {'name': 'Watchlist.csv', 'parents': [self.folder_id]}
-            self.service.files().create(body=file_metadata, media_body=media).execute()
+            self.service.files().create(
+                body=file_metadata, 
+                media_body=media,
+                supportsAllDrives=True # 🌟 修正 2：支援團隊共用雲端硬碟
+            ).execute()
             print("✅ 已建立全新的自選股清單並上傳至 Google Drive！")
 
     # ==========================================
