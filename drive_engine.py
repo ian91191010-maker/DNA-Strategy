@@ -200,7 +200,8 @@ class DriveDataEngine:
         new_files = [f for f in all_excel_files if f['date_str'] > latest_date_in_db]
         
         if new_files:
-            print(f"發現 {len(new_files)} 個新檔案，準備進行增量更新...")
+            import streamlit as st # 加入這行
+            st.info(f"發現 {len(new_files)} 個新檔案，正在為您下載並合併，請稍候...")
             new_data_list = []
             for f_info in new_files:
                 df_temp = self.download_and_parse_excel(f_info['id'])
@@ -227,7 +228,8 @@ class DriveDataEngine:
             master_df = pd.concat([master_df, new_df], ignore_index=True) if not master_df.empty else new_df
             self.upload_master_table(master_df, master_info['id'] if master_info else None)
         else:
-            print("雲端無新檔案，直接使用現有總表進行運算。")
+            import streamlit as st # 加入這行
+            st.info("雲端無新的 Excel 檔案，直接使用現有總表進行運算。")
 
         # --- [階段二：根據最新總表計算連續條件與排行] ---
         if master_df.empty:
