@@ -233,7 +233,7 @@ class DriveDataEngine:
         new_files = [f for f in all_excel_files if f['date_str'] > latest_date_in_db]
         
         if new_files:
-            import streamlit as st # 加入這行
+            import streamlit as st
             st.info(f"發現 {len(new_files)} 個新檔案，正在為您下載並合併，請稍候...")
             new_data_list = []
             for f_info in new_files:
@@ -261,16 +261,19 @@ class DriveDataEngine:
             master_df = pd.concat([master_df, new_df], ignore_index=True) if not master_df.empty else new_df
             self.upload_master_table(master_df, master_info['id'] if master_info else None)
         else:
-            import streamlit as st # 加入這行
+            import streamlit as st
             st.info("雲端無新的 Excel 檔案，直接使用現有總表進行運算。")
 
-        # --- [階段二：根據最新總表計算連續條件與排行] ---
+        # --- [階段二：根據最新總表計算條件與排行] ---
         if master_df.empty:
             return pd.DataFrame()
 
         all_dates = sorted(master_df['日期'].unique(), reverse=True)
-        min_consecutive_days = 2
-        missing_days_threshold = 2
+        
+        # 🌟 修改點：將連續門檻改為 1 (只要有出現就列入)
+        min_consecutive_days = 1 
+        # 🌟 維持點：最近 2 天內不能完全從名單中消失
+        missing_days_threshold = 2 
         
         eligible_stocks = []
         grouped = master_df.groupby('股號')
@@ -280,13 +283,14 @@ class DriveDataEngine:
             presence = [1 if d in stock_dates else 0 for d in all_dates]
             presence_str = "".join(map(str, presence))
             
+            # 只要 presence_str 中包含 "1" 且近期 2 天沒斷訊，即符合初篩
             has_consecutive = ("1" * min_consecutive_days) in presence_str
             is_missing = all(p == 0 for p in presence[:missing_days_threshold]) if len(presence) >= missing_days_threshold else False
             
             if has_consecutive and not is_missing:
                 group = group.sort_values('日期')
-                old_p = float(group.iloc[0]['收盤價'])       # 強制轉為浮點數
-                file_new_p = float(group.iloc[-1]['收盤價']) # 強制轉為浮點數
+                old_p = float(group.iloc[0]['收盤價'])
+                file_new_p = float(group.iloc[-1]['收盤價'])
                 stock_name = group.iloc[-1]['股名']
                 
                 real_new_p = file_new_p
@@ -295,9 +299,9 @@ class DriveDataEngine:
                 eligible_stocks.append({
                     '股號': sid,
                     '股名': stock_name,
-                    '收盤價(最新日期)': real_new_p,  # 這裡是真實市價
-                    '漲跌幅 (%)': round(true_change_pct, 2), # 這裡是真實漲跌幅
-                    '最舊收盤價': old_p # 傳給下一手引擎備用
+                    '收盤價(最新日期)': real_new_p,
+                    '漲跌幅 (%)': round(true_change_pct, 2),
+                    '最舊收盤價': old_p 
                 })
                 
         result_df = pd.DataFrame(eligible_stocks)
