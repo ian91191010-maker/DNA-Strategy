@@ -586,7 +586,7 @@ with layer3_bottom:
                     <li>正常轉折: {m_env.get('Normal_N', '-')}</li>
                     <li>高低轉折: {m_env.get('Low_N', '-')}</li>
                     <li>{streak_msg}</li>
-                    <li><br>{m_env.get('Mod_G', '-')}</li>
+                    <li>{m_env.get('Mod_G', '-')}</li>
                 </ul>
             </div>
             
