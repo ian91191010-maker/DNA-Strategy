@@ -77,8 +77,8 @@ class BigBullAuditEngine:
                     bear_streak += step
 
         mod_g_msgs = []
-        if chk_33: mod_g_msgs.append("[紅色警戒] DIF日頂天")
-        if chk_34_day_bottom: mod_g_msgs.append("[綠色買點] 日頂地")
+        if chk_33: mod_g_msgs.append("🔴 [高風險]")
+        if chk_34_day_bottom: mod_g_msgs.append("🟢 [進場]")
         
         if bull_streak >= 6.0 and len(df_m) >= 2:
             curr_k, prev_k = df_m.iloc[-1], df_m.iloc[-2]
@@ -89,25 +89,29 @@ class BigBullAuditEngine:
                 resolution_x = prev_k['low'] - A
                 if A < B: mod_g_msgs.append(f"月{bull_streak}K (A<B 化解)")
                 elif curr_k['close'] < resolution_x: mod_g_msgs.append(f"月{bull_streak}K (破X點化解)")
-                else: mod_g_msgs.append(f"急漲危機! 月{bull_streak}K未破關")
+                else: mod_g_msgs.append("⚠️ [誘多陷阱]")
             else:
                 resolution_x = prev_k['low']
                 if curr_k['close'] < resolution_x: mod_g_msgs.append(f"月{bull_streak}K (破X點化解)")
-                else: mod_g_msgs.append(f"急漲危機! 月{bull_streak}K未破關")
+                else: mod_g_msgs.append("⚠️ [誘多陷阱]")
 
         elif bear_streak >= 6.0:
-            mod_g_msgs.append(f"[空頭轉機] 月{bear_streak}K")
+            mod_g_msgs.append(f"🚀 月{bear_streak}K 買點/轉機")
 
         is_safe = chk_timing and (row['close'] > active_n) and chk_05
+
+        mod_g_str = "<br>".join(mod_g_msgs) if mod_g_msgs else "🟡 [常規操作]"
 
         self.market_checks = {
             "TSE_Close": round(row['close'], 2),
             "Active_N": round(active_n, 2),
+            "Normal_N": round(n_val, 2),         # 新增：正常轉折點位
+            "Low_N": round(n_low_val, 2),        # 新增：高低轉折點位
             "Is_Safe": is_safe,
             "Env_Light": "🟢 允許買進 (大盤安全)" if is_safe else "🔴 觀望/風控 (大盤修正)",
             "Streak_Msg": f"多頭 {bull_streak}K | 空頭 {bear_streak}K",
             "Chk_30_Wave": chk_30_wave,
-            "Mod_G": " | ".join(mod_g_msgs) if mod_g_msgs else "系統安全"
+            "Mod_G": mod_g_str                   # 套用新版換行字串
         }
         return self.market_checks
 
