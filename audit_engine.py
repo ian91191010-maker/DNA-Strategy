@@ -29,18 +29,18 @@ class BigBullAuditEngine:
         
         row, prev = df.iloc[-1], df.iloc[-2]
         
-        # 月線轉折 N
+        # 月線轉折 N (修正演算法：改用絕對位置取值，避免日期跳缺與 NaN 問題)
         df_m = df.resample('ME').agg({'open':'first','close':'last','high':'max','low':'min'})
-        df_m.index = df_m.index.to_period('M')
-        current_period = df.index[-1].to_period('M')
-        prev_1_period, prev_2_period = current_period - 1, current_period - 2
         
-        n_high = max(df_m.loc[prev_1_period, 'high'], df_m.loc[prev_2_period, 'high'])
-        n_low  = min(df_m.loc[prev_1_period, 'low'], df_m.loc[prev_2_period, 'low'])
-        n_val  = (n_high + n_low) / 2
-        n_low_val = (df_m.loc[prev_1_period, 'high'] + df_m.loc[prev_1_period, 'low']) / 2
-        
-        current_month_min = df[df.index.to_period('M') == current_period]['low'].min()
+        if len(df_m) >= 3:
+            n_high = df_m['high'].iloc[-3:-1].max()  # 前 2 個月最高點
+            n_low = df_m['low'].iloc[-3:-1].min()    # 前 2 個月最低點
+            n_val = (n_high + n_low) / 2
+            n_low_val = (df_m['high'].iloc[-2] + df_m['low'].iloc[-2]) / 2 # 前 1 個月轉折
+        else:
+            n_val, n_low_val = 0.0, 0.0
+            
+        current_month_min = df_m['low'].iloc[-1]
         is_extreme_bear = (current_month_min - n_val) < -600
         active_n = n_low_val if is_extreme_bear else n_val
         
@@ -76,6 +76,7 @@ class BigBullAuditEngine:
                 if (curr_k['close'] < curr_k['open']) and (curr_k['close'] < prev_k['low']) and ((prev_k['close'] - curr_k['close']) > 300 or bear_streak >= 5.5):
                     bear_streak += step
 
+        # 字串陣列寫入與 HTML 跳脫
         mod_g_msgs = []
         if chk_33: mod_g_msgs.append("🔴 [高風險]")
         if chk_34_day_bottom: mod_g_msgs.append("🟢 [進場]")
@@ -87,7 +88,7 @@ class BigBullAuditEngine:
             
             if curr_k['high'] > prev_k['high']:
                 resolution_x = prev_k['low'] - A
-                if A < B: mod_g_msgs.append(f"月{bull_streak}K (A<B 化解)")
+                if A < B: mod_g_msgs.append(f"月{bull_streak}K (A &lt; B 化解)") # 修正 HTML 渲染錯誤
                 elif curr_k['close'] < resolution_x: mod_g_msgs.append(f"月{bull_streak}K (破X點化解)")
                 else: mod_g_msgs.append("⚠️ [誘多陷阱]")
             else:
@@ -105,13 +106,13 @@ class BigBullAuditEngine:
         self.market_checks = {
             "TSE_Close": round(row['close'], 2),
             "Active_N": round(active_n, 2),
-            "Normal_N": round(n_val, 2),         # 新增：正常轉折點位
-            "Low_N": round(n_low_val, 2),        # 新增：高低轉折點位
+            "Normal_N": round(n_val, 2),
+            "Low_N": round(n_low_val, 2),
             "Is_Safe": is_safe,
             "Env_Light": "🟢 允許買進 (大盤安全)" if is_safe else "🔴 觀望/風控 (大盤修正)",
             "Streak_Msg": f"多頭 {bull_streak}K | 空頭 {bear_streak}K",
             "Chk_30_Wave": chk_30_wave,
-            "Mod_G": mod_g_str                   # 套用新版換行字串
+            "Mod_G": mod_g_str
         }
         return self.market_checks
 
