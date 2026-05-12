@@ -582,9 +582,11 @@ with layer3_bottom:
             
             <div style="background-color: rgba(239, 83, 80, 0.5); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                 <h4 style="margin: 0 0 10px 0; color: white;">轉折與趨勢</h4>
-                <ul style="margin: 0; padding-left: 20px; color: white;">
+                <ul style="margin: 0; padding-left: 20px; color: white; line-height: 1.6;">
+                    <li>正常轉折: {m_env.get('Normal_N', '-')}</li>
+                    <li>高低轉折: {m_env.get('Low_N', '-')}</li>
                     <li>{streak_msg}</li>
-                    <li>系統風險: {m_env.get('Mod_G', '-')}</li>
+                    <li><br>{m_env.get('Mod_G', '-')}</li>
                 </ul>
             </div>
             
